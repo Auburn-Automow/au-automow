@@ -1,9 +1,9 @@
 <stack>
-  <description brief="orp_tools">orp_tools</description>
+  <description brief="au-automow">au-automow</description>
   <author>Maintained by John Harrison</author>
   <license>BSD</license>  
   <review status="unreviewed" notes=""/>
-  <url>http://ros.org/wiki/orp_tools</url>
+  <url>http://ros.org/wiki/au-automow</url>
   <depend stack="ros" />
 
 </stack>
