@@ -1,0 +1,9 @@
+<stack>
+  <description brief="orp_tools">orp_tools</description>
+  <author>Maintained by John Harrison</author>
+  <license>BSD</license>  
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/orp_tools</url>
+  <depend stack="ros" />
+
+</stack>

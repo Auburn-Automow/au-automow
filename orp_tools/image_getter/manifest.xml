@@ -1,0 +1,21 @@
+<package>
+  <description brief="image_getter">
+
+     image_getter
+
+  </description>
+  <author>John Harrison</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/image_getter</url>
+  <depend package="rospy"/>
+  <depend package="sensor_msgs"/>
+  <depend package="opencv2"/>
+  <depend package="cv_bridge"/>
+  <depend package="roscpp"/>
+  <depend package="std_msgs"/>
+  <depend package="image_transport"/>
+
+</package>
+
+
