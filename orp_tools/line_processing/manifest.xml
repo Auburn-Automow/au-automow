@@ -1,13 +1,13 @@
 <package>
-  <description brief="orpd_link">
+  <description brief="line_processing">
 
-     orpd_link
+     Line Processing
 
   </description>
   <author>John Harrison</author>
   <license>BSD</license>
   <review status="unreviewed" notes=""/>
-  <url>http://ros.org/wiki/orpd_link</url>
+  <url>http://ros.org/wiki/line_processing</url>
   <depend package="sensor_msgs"/>
   <depend package="opencv2"/>
   <depend package="cv_bridge"/>
