@@ -1,0 +1,9 @@
+<stack>
+  <description brief="au_automow_vision">au_automow_vision</description>
+  <author>Maintained by William Woodall</author>
+  <license></license>  
+  <review status="unreviewed" notes=""/>
+  <url>http://redmine.ausparc.com/wiki/automow-2010/Au_automow_vision</url>
+  <depend stack="ros" />
+
+</stack>
