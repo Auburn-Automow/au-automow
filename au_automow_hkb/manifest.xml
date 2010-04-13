@@ -1,0 +1,14 @@
+<package>
+  <description brief="au_automow_hkb">
+
+     au_automow_hkb
+
+  </description>
+  <author>Michael Carroll</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/au_automow_hkb</url>
+
+</package>
+
+
