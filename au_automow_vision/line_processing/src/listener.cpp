@@ -151,8 +151,8 @@ int binaryPixelDensityFinder(IplImage *img, int window_height, int window_width,
 	return max_density;
 };
 
-void DensityFilter(struct window_density densities[], int max_density, int window_height, int window_width, int widthStep) {
-	for(int n=0; n < window_height*window_width; n++) {
+void DensityFilter(struct window_density densities[], int max_density, int window_height, int window_width, int widthStep, int max_windows) {
+	for(int n=0; n < max_windows; n++) {
 		if(densities[n].density < max_density*0.75) {
 			for(int k=0; k < window_height; k++) {
 				uchar *ptr = densities[n].index + k*widthStep;
@@ -228,8 +228,9 @@ CvSeq* findLinesInImage(IplImage *img, CvMemStorage *line_storage) {
 	
 	CvSeq *lines;
 
-	struct window_density densities[WIN_DENSITY_HEIGHT*WIN_DENSITY_WIDTH];
+	int max_windows = img->height/WIN_DENSITY_HEIGHT * img->width/WIN_DENSITY_WIDTH;
 	int max_density;
+	struct window_density densities[max_windows];
 		
 	/////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
 	SUBTRACT_GREEN_RED(img);
@@ -244,7 +245,7 @@ CvSeq* findLinesInImage(IplImage *img, CvMemStorage *line_storage) {
 	//cvShowImage("threshold", img_thresh);
 
 	max_density = binaryPixelDensityFinder(img_thresh, WIN_DENSITY_HEIGHT, WIN_DENSITY_WIDTH, densities);
-	DensityFilter(densities, max_density, WIN_DENSITY_HEIGHT, WIN_DENSITY_WIDTH, img_thresh->widthStep);
+	DensityFilter(densities, max_density, WIN_DENSITY_HEIGHT, WIN_DENSITY_WIDTH, img_thresh->widthStep, max_windows);
 	
 	//cvNamedWindow("filter", 1);
 	//cvShowImage("filter", img_thresh);
