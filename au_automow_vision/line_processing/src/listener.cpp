@@ -316,9 +316,9 @@ void listenCallback(const sensor_msgs::ImageConstPtr& msg) {
 	CvSeq *trend_lines = cvCreateSeq(0, sizeof(CvSeq), 2*sizeof(float), trends_storage);
 	
 	//IplImage *img_captured = cvLoadImage(argv[1], CV_LOAD_IMAGE_UNCHANGED);
-	//IplImage *img_copy = cvCreateImage(cvGetSize(img_captured), IPL_DEPTH_8U, 3);
 
 	img_captured = bridge_.imgMsgToCv(msg);
+	img_copy = cvCreateImage(cvGetSize(img_captured), IPL_DEPTH_8U, 3);
 
 	int max_rho = findMaxRho(img_captured);
 	/////////////////////////////////////// Stephen Processing /////////////////////////////////////////
@@ -328,6 +328,8 @@ void listenCallback(const sensor_msgs::ImageConstPtr& msg) {
 	detected_lines = findLinesInImage(img_captured, line_storage);
 					
 	findTrendLines(detected_lines, trend_lines, max_rho);
+	
+	displayCvSeq(trend_lines);
 			
 	displayLineDetection("trend line", img_copy, trend_lines);
 	
