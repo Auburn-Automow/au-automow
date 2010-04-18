@@ -13,6 +13,8 @@
 
 #define SORT_BY_RHO 0
 #define SORT_BY_THETA 1
+#define WIN_DENSITY_HEIGHT 40
+#define WIN_DENSITY_WIDTH 40
 
 #define SUBTRACT_GREEN_RED(img) (cvSubS(img, cvScalar(0, 255, 255, 0), img, NULL))
 #define THRESHOLD_IMAGE(img1, img2) (cvThreshold(img1, img2, maxPixVal-1, 255, CV_THRESH_BINARY))
@@ -150,7 +152,7 @@ int binaryPixelDensityFinder(IplImage *img, int window_height, int window_width,
 };
 
 void DensityFilter(struct window_density densities[], int max_density, int window_height, int window_width, int widthStep) {
-	for(int n=0; n < 768; n++) {
+	for(int n=0; n < window_height*window_width; n++) {
 		if(densities[n].density < max_density*0.75) {
 			for(int k=0; k < window_height; k++) {
 				uchar *ptr = densities[n].index + k*widthStep;
@@ -226,7 +228,7 @@ CvSeq* findLinesInImage(IplImage *img, CvMemStorage *line_storage) {
 	
 	CvSeq *lines;
 
-	struct window_density densities[768];
+	struct window_density densities[WIN_DENSITY_HEIGHT*WIN_DENSITY_WIDTH];
 	int max_density;
 		
 	/////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
@@ -238,21 +240,21 @@ CvSeq* findLinesInImage(IplImage *img, CvMemStorage *line_storage) {
 		
 	THRESHOLD_IMAGE(img_1chan, img_thresh);
 
-	cvNamedWindow("threshold", 1);
-	cvShowImage("threshold", img_thresh);
+	//cvNamedWindow("threshold", 1);
+	//cvShowImage("threshold", img_thresh);
 
-	max_density = binaryPixelDensityFinder(img_thresh, 40, 40, densities);
-	DensityFilter(densities, max_density, 40, 40, img_thresh->widthStep);
+	max_density = binaryPixelDensityFinder(img_thresh, WIN_DENSITY_HEIGHT, WIN_DENSITY_WIDTH, densities);
+	DensityFilter(densities, max_density, WIN_DENSITY_HEIGHT, WIN_DENSITY_WIDTH, img_thresh->widthStep);
 	
-	cvNamedWindow("filter", 1);
-	cvShowImage("filter", img_thresh);
+	//cvNamedWindow("filter", 1);
+	//cvShowImage("filter", img_thresh);
 	
 	/*printf("densities and indices:\n");
 	for(int n=0; n < 768; n++) {
 		printf("index: %p\tdensity: %d\n", densities[n].index, densities[n].density);
 	}
 		
-	printf("max_density: %d\n", max_density);*/
+	//printf("max_density: %d\n", max_density);*/
 				
 	lines = cvHoughLines2(img_thresh, line_storage, CV_HOUGH_STANDARD, rho, theta, threshold, 0, 0);
 	
