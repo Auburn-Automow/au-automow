@@ -350,12 +350,10 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     sensor_msgs::Image msg(*processed_ros_img);
     // Publish image to topic /processed_image
     processed_image_publisher.publish(msg);
-    cvReleaseImage(&captured_img_copy);
 #endif
     
     // Cleanup
     cvReleaseMemStorage(&line_storage);
-    cvReleaseImage(&captured_img);
 }
 
 int main(int argc, char** argv) {
