@@ -1,0 +1,4 @@
+<launch>
+	<node name="image_getter" pkg="image_getter" type="image_getter" />
+	<node name="line_processing" pkg="line_processing" type="line_processing" />
+</launch>
