@@ -17,10 +17,11 @@
 #define WIN_DENSITY_WIDTH 40
 
 #define SUBTRACT_GREEN_RED(img) (cvSubS(img, cvScalar(0, 255, 255, 0), img, NULL))
-#define THRESHOLD_IMAGE(img1, img2) (cvThreshold(img1, img2, maxPixVal-1, 255, CV_THRESH_BINARY))
+#define THRESHOLD_IMAGE(img1, img2) (cvThreshold(img1, img2, maxPixVal-5, 255, CV_THRESH_BINARY))
 
 // Uncomment this line to have the lines drawn on the original image and transmitted
 #define __TX_PROCESSED_IMAGE
+#define __INVERT_GRAYSCALE
 
 sensor_msgs::CvBridge bridge_;
 
@@ -60,6 +61,14 @@ void displayCvSeq(CvSeq *seq) {
         ROS_INFO("rho: %.3f\ttheta: %.3f", line[0], line[1]*180/CV_PI);
     }
 };
+
+void invertGrayscale(IplImage *img, int max_val) {
+	uchar *data = (uchar *)img->imageData;
+	
+	for(int i=0;i<img->height;i++) for(int j=0;j<img->width;j++) for(int k=0;k<img->nChannels;k++)
+		data[i*img->widthStep+j*img->nChannels+k]=max_val-data[i*img->widthStep+j*img->nChannels+k];
+	
+}
 
 void drawLines(IplImage *img, CvSeq *lines_to_draw)
 {
@@ -158,7 +167,12 @@ int binaryPixelDensityFinder(IplImage *img, int window_height, int window_width,
 
 void DensityFilter(struct window_density densities[], int max_density, int window_height, int window_width, int widthStep, int max_windows) {
     for(int n=0; n < max_windows; n++) {
+		  #ifndef __INVERT_GRAYSCALE
         if(densities[n].density < max_density*0.75) {
+		  #endif
+		  #ifdef __INVERT_GRAYSCALE
+		  if(densities[n].density < max_density*0.2) {
+		  #endif
             for(int k=0; k < window_height; k++) {
                 uchar *ptr = densities[n].index + k*widthStep;
                 
@@ -241,7 +255,11 @@ CvSeq* findLinesInImage(IplImage *img, CvMemStorage *line_storage) {
     SUBTRACT_GREEN_RED(img);
     
     cvCvtColor(img, img_1chan, CV_RGB2GRAY);
+
+	 maxPixVal = maxPixelValue(img_1chan);
     
+	 invertGrayscale(img_1chan, maxPixVal);
+
     maxPixVal = maxPixelValue(img_1chan);
         
     THRESHOLD_IMAGE(img_1chan, img_thresh);
