@@ -1,2 +1,6 @@
 build*
 bin*
+.*
+*/src/*
+*.pyc
+*.pyo
