@@ -1,7 +1,9 @@
 build*
 bin*
 .*
-*/src/*
+src*
+srv*
+msg*
 *.pyc
 *.pyo
 CMakeFiles*
