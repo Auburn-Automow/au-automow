@@ -13,11 +13,14 @@
 
 #define SORT_BY_RHO 0
 #define SORT_BY_THETA 1
-#define WIN_DENSITY_HEIGHT 40
-#define WIN_DENSITY_WIDTH 40
+
+#define RESIZE_FACTOR 2 // relies on pyrdown() in image_getter()
+
+#define WIN_DENSITY_HEIGHT (40 / RESIZE_FACTOR)
+#define WIN_DENSITY_WIDTH (40 / RESIZE_FACTOR)
 
 #define SUBTRACT_GREEN_RED(img) (cvSubS(img, cvScalar(0, 255, 255, 0), img, NULL))
-#define THRESHOLD_IMAGE(img1, img2) (cvThreshold(img1, img2, maxPixVal-5, 255, CV_THRESH_BINARY))
+#define THRESHOLD_IMAGE(img1, img2) (cvThreshold(img1, img2, maxPixVal, 255, CV_THRESH_BINARY))
 
 // Uncomment this line to have the lines drawn on the original image and transmitted
 #define __TX_PROCESSED_IMAGE
@@ -256,6 +259,8 @@ CvSeq* findLinesInImage(IplImage *img, CvMemStorage *line_storage) {
     
     cvCvtColor(img, img_1chan, CV_RGB2GRAY);
 
+    cvEqualizeHist(img_1chan, img_1chan); // scale pixel intensity in image
+
 	 maxPixVal = maxPixelValue(img_1chan);
     
 	 invertGrayscale(img_1chan, maxPixVal);
@@ -328,17 +333,22 @@ void findTrendLines(CvSeq *found_lines, CvSeq *trend_lines, int max_rho) {
 
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
+    // Load the bird's eye view conversion matrix 
+    CvMat *birdeye_mat = (CvMat*)cvLoad("birdeye_convert_mat.xml");
+
     // Convert the image received into an IPLimage
     IplImage *captured_img;
     captured_img = bridge_.imgMsgToCv(ros_img);
     
-#ifdef __TX_PROCESSED_IMAGE
-    // Copy the original image for later use
-    IplImage *captured_img_copy;
-    captured_img_copy = cvCreateImage(cvGetSize(captured_img), IPL_DEPTH_8U, 3);
-    cvCopy(captured_img, captured_img_copy, NULL);
-    //captured_img_copy = cvCloneImage(captured_img);
-#endif
+    // create bird's eye view
+    IplImage *captured_img_bird;
+    captured_img_bird = cvCreateImage(cvGetSize(captured_img), IPL_DEPTH_8U, 3);
+
+    cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
+                      CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
+    
+    // Copy the bird's eye image back to the original 
+    cvCopy(captured_img_bird, captured_img, NULL);
     
     // Determine the maximum Rho on the captured image
     int max_rho = findMaxRho(captured_img);
@@ -362,9 +372,9 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     
 #ifdef __TX_PROCESSED_IMAGE
     // Draw the lines found on the copy of the original image
-    drawLines(captured_img_copy, trend_lines);
+    drawLines(captured_img_bird, trend_lines);
     // Convert processed image into ros_img_msg
-    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(captured_img_copy);
+    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(captured_img_bird);
     sensor_msgs::Image msg(*processed_ros_img);
     // Publish image to topic /processed_image
     processed_image_publisher.publish(msg);
