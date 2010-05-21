@@ -1,4 +1,7 @@
 #include <ros/ros.h>
+#include <ros/param.h>
+#include <string>
+#include <iostream>
 #include <std_msgs/String.h>
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/Image.h>
@@ -23,10 +26,13 @@
 #define THRESHOLD_IMAGE(img1, img2) (cvThreshold(img1, img2, maxPixVal, 255, CV_THRESH_BINARY))
 
 // Uncomment this line to have the lines drawn on the original image and transmitted
-#define __TX_PROCESSED_IMAGE
+#define __TX_PROCESSED_IMAGE 1
 #define __INVERT_GRAYSCALE
 
 sensor_msgs::CvBridge bridge_;
+
+// Load the bird's eye view conversion matrix 
+CvMat *birdeye_mat;
 
 #ifdef __TX_PROCESSED_IMAGE
 ros::Publisher processed_image_publisher;
@@ -333,9 +339,6 @@ void findTrendLines(CvSeq *found_lines, CvSeq *trend_lines, int max_rho) {
 
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
-    // Load the bird's eye view conversion matrix 
-    CvMat *birdeye_mat = (CvMat*)cvLoad("birdeye_convert_mat.xml");
-
     // Convert the image received into an IPLimage
     IplImage *captured_img;
     captured_img = bridge_.imgMsgToCv(ros_img);
@@ -386,12 +389,21 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
 
 int main(int argc, char** argv) {
     // Initialize the node
-    ros::init(argc, argv, "line_processing_node");
+    ros::init(argc, argv, "line_processing");
     ros::NodeHandle n;
+    std::string path_to_config;
+    std::string default_path = "/home/william/automow/automow/au_automow_vision/line_processing/birdeye_convert_mat.xml";
+    n.param("birds_eye", path_to_config, default_path);
+    // Load the bird's eye view conversion matrix 
+    birdeye_mat = (CvMat*)cvLoad(path_to_config.c_str());
+    if (birdeye_mat == NULL) { 
+        ROS_ERROR("Birds eye matrix not loaded properly. Set the birds_eye param");
+        return -1;
+    }
     // Register the node handle with the image transport
     image_transport::ImageTransport it(n);
     // Set the image buffer to 1 so that we process the latest image always
-    image_transport::Subscriber sub = it.subscribe("image", 1, imageReceived);
+    image_transport::Subscriber sub = it.subscribe("/usb_cam/image_raw", 1, imageReceived);
 #ifdef __TX_PROCESSED_IMAGE
     processed_image_publisher = n.advertise<sensor_msgs::Image>("processed_image", 10);
 #endif
