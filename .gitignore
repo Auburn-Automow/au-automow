@@ -8,4 +8,4 @@ msg*
 *.pyo
 CMakeFiles*
 CMakeCache.txt
-
+*.bag
