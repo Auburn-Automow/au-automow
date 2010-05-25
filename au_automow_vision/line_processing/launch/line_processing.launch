@@ -1,5 +1,5 @@
 <launch>
-    <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="log"> 
+    <node name="gencam_cu" pkg="gencam_cu" type="gencam_cu" output="log"> 
         <!-- params go here, if we need to confiugre the usb cam -->
     </node>
     <node name="line_processing" pkg="line_processing" type="line_processing" output="screen">

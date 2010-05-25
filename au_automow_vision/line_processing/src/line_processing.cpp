@@ -72,7 +72,6 @@ void findLRFpoints(IplImage *img, IplImage *original, double mags[]) {
 	origin.x = 252;
 	origin.y = img->height - 1;
 	
-	//double mags[MAX_SCANS] = {0};
 	int hold;
 	int col = 0, row = 0;
 	
@@ -359,8 +358,6 @@ void findLinesInImage(IplImage *img, double mags[]) {
           
       cvThreshold(img_1chan, img_thresh, maxPixVal - 50, 255, CV_THRESH_BINARY);
       
-      std::cout << "MaxPixVal: " << maxPixVal << std::endl;
-
       count = countPixels(img_thresh, 255);
 
       if(count >= (img_thresh->height * img_thresh->width) * 0.25)
@@ -464,8 +461,6 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     IplImage *captured_img_bird;
     captured_img_bird = cvCreateImage(cvGetSize(captured_img), IPL_DEPTH_8U, 3);
 	
-    ROS_INFO_STREAM("img height: " << captured_img->height << "\timg width: " << captured_img->width);
-
     // holding array for "LRF" line detection magnitudes
     double mags[MAX_SCANS] = {0};
 
@@ -507,7 +502,7 @@ int main(int argc, char** argv) {
     // Register the node handle with the image transport
     image_transport::ImageTransport it(*n);
     // Set the image buffer to 1 so that we process the latest image always
-    image_transport::Subscriber sub = it.subscribe("/usb_cam/image_raw", 1, imageReceived);
+    image_transport::Subscriber sub = it.subscribe("/image_raw", 1, imageReceived);
 #ifdef __TX_POINT_CLOUD
     point_cloud_publisher = n->advertise<sensor_msgs::PointCloud>("image_point_cloud", 5);
 #endif
