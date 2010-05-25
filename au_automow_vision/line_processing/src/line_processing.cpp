@@ -1,4 +1,4 @@
-#include <ros/ros.h>
+
 #include <ros/param.h>
 #include <string>
 #include <iostream>
@@ -49,6 +49,7 @@ ros::Publisher processed_image_publisher;
 
 #ifdef __TX_DEBUG_IMAGE
 ros::Publisher temp_match_image_publisher;
+ros::Publisher chan_image_publisher;
 #endif
 
 ros::NodeHandle *n;
@@ -198,8 +199,8 @@ int maxPixelValue(IplImage *img) {
         
         for(int k=0; k < img->width; k++)
         {
-            if(max < *ptr)
-                max = *ptr;
+            if(max < ptr[k])
+                max = ptr[k];
         }
     }
     
@@ -315,24 +316,30 @@ void findLinesInImage(IplImage *img, double mags[]) {
     int tooManyPoints = 0;
 
     // load white grass image template
-    IplImage *templ = cvLoadImage("/home/john/au-automow/au_automow_vision/line_processing/template_jpg.jpg", CV_LOAD_IMAGE_UNCHANGED);
+    char dir[FILENAME_MAX]; 
+    std::string path;
+
+    if (getcwd(dir, sizeof(dir))) { 
+      path = std::string(dir) + "/template_jpg.jpg";
+    }
+
+    IplImage *templ = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
 
     if (templ) {
       // Create image for the template matching output
-      IplImage *img_templ = cvCreateImage(cvSize(img->width - templ->width + 1, img->height - templ->height + 1), IPL_DEPTH_8U, 3);
+      IplImage *img_template = cvCreateImage(cvSize(img->width - templ->width + 1, img->height - templ->height + 1), IPL_DEPTH_8U, 3);
       
       // image pointers
-      IplImage *img_1chan = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_8U, 1);
-      IplImage *img_thresh = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_8U, 1);
-      IplImage *temp = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_32F, 1);
-      IplImage *small = cvCreateImage(cvSize(img_templ->width/10, img_templ->height/10), IPL_DEPTH_8U, 1);
+      IplImage *img_1chan = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
+      IplImage *img_thresh = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
+      IplImage *temp = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_32F, 1);
+      IplImage *small = cvCreateImage(cvSize(img_template->width/10, img_template->height/10), IPL_DEPTH_8U, 1);
 
       // values for determining coordinates for point cloud
       int max = 0; //img_small->widthStep * img_small->height;
       int row_raw=0, col_raw=0;
       int row=0, col=0;
       uchar *ptr;      // used to iterate through the small image
-      
           
       /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
     
@@ -342,21 +349,32 @@ void findLinesInImage(IplImage *img, double mags[]) {
       cvCvtScale(temp, img_1chan, 255);
 
       maxPixVal = maxPixelValue(img_1chan);
-          
-      cvThreshold(img_1chan, img_thresh, maxPixVal-thresh_subtract, 255, CV_THRESH_BINARY);
 
 #ifdef __TX_DEBUG_IMAGE
-      sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_thresh);
-      temp_match_image_publisher.publish(*processed_ros_img);
+      {
+        sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_1chan);
+        chan_image_publisher.publish(*processed_ros_img);
+      }
 #endif
+          
+      cvThreshold(img_1chan, img_thresh, maxPixVal - 50, 255, CV_THRESH_BINARY);
+      
+      std::cout << "MaxPixVal: " << maxPixVal << std::endl;
 
       count = countPixels(img_thresh, 255);
 
-      if(count >= (img_thresh->height * img_thresh->width) * percent_coverage)
+      if(count >= (img_thresh->height * img_thresh->width) * 0.25)
          tooManyPoints = 1;
 
       if(tooManyPoints)
          blackoutImage(img_thresh);
+
+#ifdef __TX_DEBUG_IMAGE
+      {
+        sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_thresh);
+        temp_match_image_publisher.publish(*processed_ros_img);
+      }
+#endif
       
       ptr = (uchar*)small->imageData;
 
@@ -446,6 +464,8 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     IplImage *captured_img_bird;
     captured_img_bird = cvCreateImage(cvGetSize(captured_img), IPL_DEPTH_8U, 3);
 	
+    ROS_INFO_STREAM("img height: " << captured_img->height << "\timg width: " << captured_img->width);
+
     // holding array for "LRF" line detection magnitudes
     double mags[MAX_SCANS] = {0};
 
@@ -474,7 +494,7 @@ int main(int argc, char** argv) {
     // Initialize the node
     ros::init(argc, argv, "line_processing");
     std::string path_to_config;
-    std::string default_path = "/home/william/automow/automow/au_automow_vision/line_processing/birdeye_convert_mat.xml";
+    std::string default_path = "/opt/ros/boxturtle/ros/birdeye_convert_mat.xml";
     n = new ros::NodeHandle;
 
     n->param("birds_eye", path_to_config, default_path);
@@ -492,10 +512,11 @@ int main(int argc, char** argv) {
     point_cloud_publisher = n->advertise<sensor_msgs::PointCloud>("image_point_cloud", 5);
 #endif
 #ifdef __TX_PROCESSED_IMAGE
-    processed_image_publisher = n->advertise<sensor_msgs::Image>("processed_image", 10);
+    processed_image_publisher = n->advertise<sensor_msgs::Image>("processed_image", 1);
 #endif
 #ifdef __TX_DEBUG_IMAGE
-    temp_match_image_publisher = n->advertise<sensor_msgs::Image>("temp_match_image", 10);
+    temp_match_image_publisher = n->advertise<sensor_msgs::Image>("temp_match_image", 1);
+    chan_image_publisher = n->advertise<sensor_msgs::Image>("chan_image", 1);
 #endif
     // Run until killed
     ros::spin();
