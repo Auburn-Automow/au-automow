@@ -5,6 +5,7 @@
 #include <std_msgs/String.h>
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/PointCloud.h>
 #include <cv_bridge/CvBridge.h>
 #include <cstdio>
 #include <cstdlib>
@@ -25,7 +26,10 @@
 #define CV_PI_2 (CV_PI / 2)
 #define CV_2PI (2 * CV_PI)
 
+#define MAX_SCANS 100
+
 // Uncomment this line to have the lines drawn on the original image and transmitted
+#define __TX_POINT_CLOUD
 #define __TX_PROCESSED_IMAGE
 #define __TX_DEBUG_IMAGE
 #define __INVERT_GRAYSCALE
@@ -35,11 +39,19 @@ sensor_msgs::CvBridge bridge_;
 // Load the bird's eye view conversion matrix 
 CvMat *birdeye_mat;
 
+#ifdef __TX_POINT_CLOUD
+ros::Publisher point_cloud_publisher;
+#endif
+
 #ifdef __TX_PROCESSED_IMAGE
 ros::Publisher processed_image_publisher;
 #endif
 
-ros::NodeHandle n;
+#ifdef __TX_DEBUG_IMAGE
+ros::Publisher temp_match_image_publisher;
+#endif
+
+ros::NodeHandle *n;
 int thresh_subtract;
 double percent_coverage;
 
@@ -175,7 +187,7 @@ void sortLines(CvSeq *unsorted, int sort_type) {
     if(sort_type != SORT_BY_RHO && sort_type != SORT_BY_THETA)
         printf("sort type error!\n");
 
-    cvSeqSort(unsorted, cmpSort, &sort_type);
+    //cvSeqSort(unsorted, cmpSort, &sort_type);
 };
 
 int maxPixelValue(IplImage *img) {
@@ -194,6 +206,7 @@ int maxPixelValue(IplImage *img) {
     return max;
 };
 
+/*
 int binaryPixelDensityFinder(IplImage *img, int window_height, int window_width, struct window_density window_densities[]) {
     int max_density = 0;
     int density = 0;
@@ -225,6 +238,7 @@ int binaryPixelDensityFinder(IplImage *img, int window_height, int window_width,
     return max_density;
 };
 
+
 void DensityFilter(struct window_density densities[], int max_density, int window_height, int window_width, int widthStep, int max_windows) {
     for(int n=0; n < max_windows; n++) {
 		  #ifndef __INVERT_GRAYSCALE
@@ -242,7 +256,7 @@ void DensityFilter(struct window_density densities[], int max_density, int windo
         }
     }
 };
-
+*/
 void averageToTrends(CvSeq *group, CvSeq *trend_lines) {
     float rho_sum = 0;
     float theta_sum = 0;
@@ -299,72 +313,83 @@ void findLinesInImage(IplImage *img, double mags[]) {
     // plain grass detection
     int count = 0;
     int tooManyPoints = 0;
-	double percent_coverage = 0.25;
 
     // load white grass image template
-    IplImage *templ = cvLoadImage("template.tiff", CV_LOAD_IMAGE_UNCHANGED);
+    IplImage *templ = cvLoadImage("/home/john/au-automow/au_automow_vision/line_processing/template_jpg.jpg", CV_LOAD_IMAGE_UNCHANGED);
 
-    // Create image for the template matching output
-    img_templ = cvCreateImage(cvSize(img->width - templ->width + 1, img->height - templ->height + 1), IPL_DEPTH_8U, 1);
-    
-    // image pointers
-    IplImage *img_1chan = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_8U, 1);
-    IplImage *img_thresh = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_8U, 1);
-    IplImage *temp = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_32F, 1);
-    IplImage *small = cvCreateImage(cvSize(img_templ->width/10, img_templ->height/10), IPL_DEPTH_8U, 1);
+    if (templ) {
+      // Create image for the template matching output
+      IplImage *img_templ = cvCreateImage(cvSize(img->width - templ->width + 1, img->height - templ->height + 1), IPL_DEPTH_8U, 3);
+      
+      // image pointers
+      IplImage *img_1chan = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_8U, 1);
+      IplImage *img_thresh = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_8U, 1);
+      IplImage *temp = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_32F, 1);
+      IplImage *small = cvCreateImage(cvSize(img_templ->width/10, img_templ->height/10), IPL_DEPTH_8U, 1);
 
-    // values for determining coordinates for point cloud
-    int max = 0; //img_small->widthStep * img_small->height;
-	 int row_raw=0, col_raw=0;
-	 int row=0, col=0;
-    uchar *ptr;      // used to iterate through the small image
+      // values for determining coordinates for point cloud
+      int max = 0; //img_small->widthStep * img_small->height;
+      int row_raw=0, col_raw=0;
+      int row=0, col=0;
+      uchar *ptr;      // used to iterate through the small image
+      
+          
+      /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
     
-        
-    /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
-	
-    cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
-	cvNormalize(temp, temp, 1, 0, CV_MINMAX);
-	
-	cvCvtScale(temp, img_1chan, 255);
+      cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
+      cvNormalize(temp, temp, 1, 0, CV_MINMAX);
+    
+      cvCvtScale(temp, img_1chan, 255);
+
+      maxPixVal = maxPixelValue(img_1chan);
+          
+      cvThreshold(img_1chan, img_thresh, maxPixVal-thresh_subtract, 255, CV_THRESH_BINARY);
 
 #ifdef __TX_DEBUG_IMAGE
-    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_1chan);
-    sensor_msgs::Image msg(*img_1chan);
-    temp_match_image_publisher(msg);
+      sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_thresh);
+      temp_match_image_publisher.publish(*processed_ros_img);
 #endif
 
-    maxPixVal = maxPixelValue(img_1chan);
+      count = countPixels(img_thresh, 255);
+
+      if(count >= (img_thresh->height * img_thresh->width) * percent_coverage)
+         tooManyPoints = 1;
+
+      if(tooManyPoints)
+         blackoutImage(img_thresh);
+      
+      ptr = (uchar*)small->imageData;
+
+      cvResize(img_thresh, small, NULL);
+
+      max = small->widthStep * small->height;
+
+      sensor_msgs::PointCloud point_cloud;
+
+      for(int m=0; m < max; m++) {
+         if(ptr[m] != 0) {
+          col_raw = m % small->widthStep;
+          row_raw = m / small->widthStep;
         
-    cvThreshold(img_1chan, img_thresh, maxPixVal-thresh_subtract, 255, CV_THRESH_BINARY)
-
-    count = countPixels(img_thresh, 255);
-
-    if(count >= (img_thresh->height * img_thresh->width) * percent_coverage)
-       tooManyPoints = 1;
-
-    if(tooManyPoints)
-       blackoutImage(img_thresh);
-    
-    ptr = (uchar*)small->imageData;
-
-    cvResize(img_thresh, small, NULL);
-
-    max = small->widthStep * small->height;
-
-    for(int m=0; m < max; m++) {
-       if(ptr[m] != 0) {
-		    col_raw = m % small->widthStep;
-	       row_raw = m / small->widthStep;
-			
-		    col = col_raw - 24;
-		    row = small->height - row_raw;
-			
+          col = col_raw - 24;
+          row = small->height - row_raw;
+          
+          geometry_msgs::Point32 found_point;
+          found_point.x = col;
+          found_point.y = row;
+          found_point.z = 0;
+          point_cloud.points.push_back(found_point);
           // place coordinates here: x = col -- y = row -- z = 0
-	    }
-    }
-   
+        }
+      }
+     
+      point_cloud_publisher.publish(point_cloud);
 
-	//findLRFpoints(img_thresh, img, mags);
+    //findLRFpoints(img_thresh, img, mags);
+  }
+  else {  
+    ROS_INFO("error loading template.jpg");
+  }
 };
 
 void findTrendLines(CvSeq *found_lines, CvSeq *trend_lines, int max_rho) {
@@ -410,8 +435,8 @@ void findTrendLines(CvSeq *found_lines, CvSeq *trend_lines, int max_rho) {
 
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
-   n.param("thresh_subtract", thresh_subtract, 50);
-   n.param("percent_coverage", percent_coverage, 0.25);
+   n->param("thresh_subtract", thresh_subtract, 50);
+   n->param("percent_coverage", percent_coverage, 0.25);
 
     // Convert the image received into an IPLimage
     IplImage *captured_img;
@@ -421,17 +446,14 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     IplImage *captured_img_bird;
     captured_img_bird = cvCreateImage(cvGetSize(captured_img), IPL_DEPTH_8U, 3);
 	
-	// holding array for "LRF" line detection magnitudes
-	double mags[MAX_SCANS] = {0};
+    // holding array for "LRF" line detection magnitudes
+    double mags[MAX_SCANS] = {0};
 
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
     
     // Copy the bird's eye image back to the original 
     cvCopy(captured_img_bird, captured_img, NULL);
-    
-    // Determine the maximum Rho on the captured image
-    int max_rho = findMaxRho(captured_img);
     
     // Detect lines in the captured image and store the resulting lines
     findLinesInImage(captured_img, mags);
@@ -445,7 +467,7 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
 #endif
     
     // Cleanup
-    cvReleaseMemStorage(&line_storage);
+    // cvReleaseMemStorage(&line_storage);
 }
 
 int main(int argc, char** argv) {
@@ -453,7 +475,9 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "line_processing");
     std::string path_to_config;
     std::string default_path = "/home/william/automow/automow/au_automow_vision/line_processing/birdeye_convert_mat.xml";
-    n.param("birds_eye", path_to_config, default_path);
+    n = new ros::NodeHandle;
+
+    n->param("birds_eye", path_to_config, default_path);
     // Load the bird's eye view conversion matrix 
     birdeye_mat = (CvMat*)cvLoad(path_to_config.c_str());
     if (birdeye_mat == NULL) { 
@@ -461,19 +485,21 @@ int main(int argc, char** argv) {
         return -1;
     }
     // Register the node handle with the image transport
-    image_transport::ImageTransport it(n);
+    image_transport::ImageTransport it(*n);
     // Set the image buffer to 1 so that we process the latest image always
     image_transport::Subscriber sub = it.subscribe("/usb_cam/image_raw", 1, imageReceived);
+#ifdef __TX_POINT_CLOUD
+    point_cloud_publisher = n->advertise<sensor_msgs::PointCloud>("image_point_cloud", 5);
+#endif
 #ifdef __TX_PROCESSED_IMAGE
-    processed_image_publisher = n.advertise<sensor_msgs::Image>("processed_image", 10);
+    processed_image_publisher = n->advertise<sensor_msgs::Image>("processed_image", 10);
 #endif
 #ifdef __TX_DEBUG_IMAGE
-    temp_match_image_publisher = n.advertise<sensor_msgs::Image>("temp_match_image", 10);
+    temp_match_image_publisher = n->advertise<sensor_msgs::Image>("temp_match_image", 10);
 #endif
     // Run until killed
     ros::spin();
     // Clean exit
     return 0;
 }
-
 
