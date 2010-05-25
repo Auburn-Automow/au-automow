@@ -25,9 +25,6 @@
 #define CV_PI_2 (CV_PI / 2)
 #define CV_2PI (2 * CV_PI)
 
-#define SUBTRACT_GREEN_RED(img) (cvSubS(img, cvScalar(0, 255, 255, 0), img, NULL))
-#define THRESHOLD_IMAGE(img1, img2) (cvThreshold(img1, img2, maxPixVal-50, 255, CV_THRESH_BINARY))
-
 // Uncomment this line to have the lines drawn on the original image and transmitted
 #define __TX_PROCESSED_IMAGE
 #define __TX_DEBUG_IMAGE
@@ -41,6 +38,10 @@ CvMat *birdeye_mat;
 #ifdef __TX_PROCESSED_IMAGE
 ros::Publisher processed_image_publisher;
 #endif
+
+ros::NodeHandle n;
+int thresh_subtract;
+double percent_coverage;
 
 int findMaxRho(IplImage *img) {
     return sqrt(pow(img->height,2) + pow(img->width,2));
@@ -302,11 +303,22 @@ void findLinesInImage(IplImage *img, double mags[]) {
 
     // load white grass image template
     IplImage *templ = cvLoadImage("template.tiff", CV_LOAD_IMAGE_UNCHANGED);
+
+    // Create image for the template matching output
+    img_templ = cvCreateImage(cvSize(img->width - templ->width + 1, img->height - templ->height + 1), IPL_DEPTH_8U, 1);
     
     // image pointers
-    IplImage *img_1chan = cvCreateImage(cvGetSize(img), IPL_DEPTH_8U, 1);
-    IplImage *img_thresh = cvCreateImage(cvGetSize(img), IPL_DEPTH_8U, 1);
-    IplImage *temp = cvCreateImage(cvGetSize(img_copy), IPL_DEPTH_32F, 1);
+    IplImage *img_1chan = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_8U, 1);
+    IplImage *img_thresh = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_8U, 1);
+    IplImage *temp = cvCreateImage(cvGetSize(img_templ), IPL_DEPTH_32F, 1);
+    IplImage *small = cvCreateImage(cvSize(img_templ->width/10, img_templ->height/10), IPL_DEPTH_8U, 1);
+
+    // values for determining coordinates for point cloud
+    int max = 0; //img_small->widthStep * img_small->height;
+	 int row_raw=0, col_raw=0;
+	 int row=0, col=0;
+    uchar *ptr;      // used to iterate through the small image
+    
         
     /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
 	
@@ -323,7 +335,7 @@ void findLinesInImage(IplImage *img, double mags[]) {
 
     maxPixVal = maxPixelValue(img_1chan);
         
-    cvThreshold(img_1chan, img_thresh, maxPixVal-50, 255, CV_THRESH_BINARY)
+    cvThreshold(img_1chan, img_thresh, maxPixVal-thresh_subtract, 255, CV_THRESH_BINARY)
 
     count = countPixels(img_thresh, 255);
 
@@ -333,7 +345,26 @@ void findLinesInImage(IplImage *img, double mags[]) {
     if(tooManyPoints)
        blackoutImage(img_thresh);
     
-	findLRFpoints(img_thresh, img, mags);
+    ptr = (uchar*)small->imageData;
+
+    cvResize(img_thresh, small, NULL);
+
+    max = small->widthStep * small->height;
+
+    for(int m=0; m < max; m++) {
+       if(ptr[m] != 0) {
+		    col_raw = m % small->widthStep;
+	       row_raw = m / small->widthStep;
+			
+		    col = col_raw - 24;
+		    row = small->height - row_raw;
+			
+          // place coordinates here: x = col -- y = row -- z = 0
+	    }
+    }
+   
+
+	//findLRFpoints(img_thresh, img, mags);
 };
 
 void findTrendLines(CvSeq *found_lines, CvSeq *trend_lines, int max_rho) {
@@ -379,6 +410,9 @@ void findTrendLines(CvSeq *found_lines, CvSeq *trend_lines, int max_rho) {
 
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
+   n.param("thresh_subtract", thresh_subtract, 50);
+   n.param("percent_coverage", percent_coverage, 0.25);
+
     // Convert the image received into an IPLimage
     IplImage *captured_img;
     captured_img = bridge_.imgMsgToCv(ros_img);
@@ -417,7 +451,6 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
 int main(int argc, char** argv) {
     // Initialize the node
     ros::init(argc, argv, "line_processing");
-    ros::NodeHandle n;
     std::string path_to_config;
     std::string default_path = "/home/william/automow/automow/au_automow_vision/line_processing/birdeye_convert_mat.xml";
     n.param("birds_eye", path_to_config, default_path);
