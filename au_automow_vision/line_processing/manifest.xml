@@ -16,6 +16,9 @@
   <depend package="image_transport"/>
   <depend package="rospy"/>
   <depend package="gencam_cu" />
+  <export>
+    <cpp cflags="-fprofile-arcs -ftest-coverage" />
+  </export>
 </package>
 
 
