@@ -12,6 +12,8 @@
 #include <highgui.h>
 #include <cv.h>
 
+#define PIX_2_M 0.00377
+
 #define MAX_TRENDS 3
 #define MAX_ANGLE_SEP 0.1745 // 0.1745 rad = 10 degrees
 
@@ -332,7 +334,6 @@ void findLinesInImage(IplImage *img, double mags[]) {
       IplImage *img_1chan = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
       IplImage *img_thresh = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
       IplImage *temp = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_32F, 1);
-      IplImage *small = cvCreateImage(cvSize(img_template->width/10, img_template->height/10), IPL_DEPTH_8U, 1);
 
       // values for determining coordinates for point cloud
       int max = 0; //img_small->widthStep * img_small->height;
@@ -356,11 +357,11 @@ void findLinesInImage(IplImage *img, double mags[]) {
       }
 #endif
           
-      cvThreshold(img_1chan, img_thresh, maxPixVal - 50, 255, CV_THRESH_BINARY);
+      cvThreshold(img_1chan, img_thresh, maxPixVal - thresh_subtract, 255, CV_THRESH_BINARY);
       
       count = countPixels(img_thresh, 255);
 
-      if(count >= (img_thresh->height * img_thresh->width) * 0.25)
+      if(count >= (img_thresh->height * img_thresh->width) * percent_coverage)
          tooManyPoints = 1;
 
       if(tooManyPoints)
@@ -373,25 +374,23 @@ void findLinesInImage(IplImage *img, double mags[]) {
       }
 #endif
       
-      ptr = (uchar*)small->imageData;
+      ptr = (uchar*)img_thresh->imageData;
 
-      cvResize(img_thresh, small, NULL);
-
-      max = small->widthStep * small->height;
+      max = img_thresh->widthStep * img_thresh->height;
 
       sensor_msgs::PointCloud point_cloud;
 
       for(int m=0; m < max; m++) {
          if(ptr[m] != 0) {
-          col_raw = m % small->widthStep;
-          row_raw = m / small->widthStep;
+          col_raw = m % img_thresh->widthStep;
+          row_raw = m / img_thresh->widthStep;
         
-          col = col_raw - 24;
-          row = small->height - row_raw;
+          col = col_raw - 193;
+          row = img_thresh->height - row_raw;
           
           geometry_msgs::Point32 found_point;
-          found_point.x = col;
-          found_point.y = row;
+          found_point.x = col * PIX_2_M;
+          found_point.y = row * PIX_2_M;
           found_point.z = 0;
           point_cloud.points.push_back(found_point);
           // place coordinates here: x = col -- y = row -- z = 0
@@ -450,8 +449,8 @@ void findTrendLines(CvSeq *found_lines, CvSeq *trend_lines, int max_rho) {
 
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
-   n->param("thresh_subtract", thresh_subtract, 50);
-   n->param("percent_coverage", percent_coverage, 0.25);
+    ros::param::get("/line_processing/thresh_subtract", thresh_subtract);
+    ros::param::get("/line_processing/percent_coverage", percent_coverage);
 
     // Convert the image received into an IPLimage
     IplImage *captured_img;
@@ -488,13 +487,18 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
 int main(int argc, char** argv) {
     // Initialize the node
     ros::init(argc, argv, "line_processing");
-    std::string path_to_config;
-    std::string default_path = "/opt/ros/boxturtle/ros/birdeye_convert_mat.xml";
     n = new ros::NodeHandle;
 
-    n->param("birds_eye", path_to_config, default_path);
+    // load white grass image template
+    char dir[FILENAME_MAX]; 
+    std::string path;
+
+    if (getcwd(dir, sizeof(dir))) { 
+      path = std::string(dir) + "/birdeye_convert_mat.xml";
+    }
+    
     // Load the bird's eye view conversion matrix 
-    birdeye_mat = (CvMat*)cvLoad(path_to_config.c_str());
+    birdeye_mat = (CvMat*)cvLoad(path.c_str());
     if (birdeye_mat == NULL) { 
         ROS_ERROR("Birds eye matrix not loaded properly. Set the birds_eye param");
         return -1;

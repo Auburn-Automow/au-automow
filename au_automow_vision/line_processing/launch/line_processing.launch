@@ -4,6 +4,8 @@
     </node>
     <node name="line_processing" pkg="line_processing" type="line_processing" output="screen">
         <param name="birds_eye" value="/home/william/automow/automow/au_automow_vision/line_processing/birdeye_convert_mat.xml" />
+        <param name="thresh_subtract" value="50" />
+        <param name="percent_coverage" value="0.20" />
         <!-- params go here, we need to make some of the settings of the algorithm dynamic -->
     </node>
 </launch>
