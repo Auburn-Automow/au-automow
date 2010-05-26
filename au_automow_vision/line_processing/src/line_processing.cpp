@@ -1,4 +1,5 @@
-
+//////////////////////// > There are alot of images that need to be double checked that they are garbage collected.
+//////////////////////// <
 #include <ros/param.h>
 #include <string>
 #include <iostream>
@@ -45,36 +46,40 @@ int thresh_subtract;
 double percent_coverage;
 
 inline void blackoutImage(IplImage *img) {
-	for (int n = img->height; n != 0; --n) {
-		for (int k = img->width; k != 0; --k) {
-			uchar* val = (uchar*)img->imageData + (n * img->widthStep) + k;
-      *val = 0; 
-		}
-	}
+    for (int n = img->height; n != 0; --n) {
+        for (int k = img->width; k != 0; --k) {
+            uchar* val = (uchar*)img->imageData + (n * img->widthStep) + k;
+            *val = 0;
+        }
+    }
 }
 
 /* countPixels() counts the number of pixels in an image that equal a given value
  */
 uchar countPixels(IplImage *img, int value, int target = 0) {
-	uchar count = 0;
-	for (int n = img->height; n != 0; --n) {
-		for (int k = img->width; k != 0; --k) {
-			if (*((uchar*)img->imageData + (n * img->widthStep) + k) == value)
-				count++;
-      if (count > target) 
-        return count;
-		}
-	}
-
-	return count;
+    uchar count = 0;
+    for (int n = img->height; n != 0; --n) {
+        for (int k = img->width; k != 0; --k) {
+            if (*((uchar*)img->imageData + (n * img->widthStep) + k) == value)
+                count++;
+            if (count > target) 
+                return count;
+        }
+    }
+    return count;
 };
 
 uchar maxPixelValue(IplImage *img) {
   uchar max = 0;
   for (int n = img->height; n != 0; --n) { 
     for (int k = img->width; k != 0; --k) {
+//////////////////////// > I think this change will reduce computation a little
+        // uchar pixel_value = *((uchar*)img->imageData + (n * img->widthStep) + k);
+        // if (max < pixel_value)
+        //     max = pixel_value;
         if (max < *((uchar*)img->imageData + (n * img->widthStep) + k))
-          max = *((uchar*)img->imageData + (n * img->widthStep) + k);
+            max = *((uchar*)img->imageData + (n * img->widthStep) + k);
+//////////////////////// <
     }
   }
   
@@ -83,55 +88,60 @@ uchar maxPixelValue(IplImage *img) {
 
 void findLinesInImage(IplImage *img) {
     int maxPixVal;
-
+    
     // plain grass detection
     int count = 0;
     int tooManyPoints = 0;
-
+//////////////////////// > This needs to be done once since this image doesn't change
     // load white grass image template
     char dir[FILENAME_MAX]; 
     std::string path;
-
+    
     if (getcwd(dir, sizeof(dir))) { 
       path = std::string(dir) + "/template_jpg.jpg";
     }
-
+    
     IplImage *templ = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
-
+//////////////////////// <
     if (templ) {
-
-      // values for determining coordinates for point cloud
-      int max = 0; //img_small->widthStep * img_small->height;
-      int row_raw=0, col_raw=0;
-      int row=0, col=0;
-      uchar *ptr;      // used to iterate through the small image
-          
-      /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
-    
-      cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
-      cvNormalize(temp, temp, 1, 0, CV_MINMAX);
-    
-      cvCvtScale(temp, img_1chan, 255);
-
-      maxPixVal = maxPixelValue(img_1chan);
-
+        
+        // values for determining coordinates for point cloud
+        int max = 0; //img_small->widthStep * img_small->height;
+        int row_raw=0, col_raw=0;
+        int row=0, col=0;
+        uchar *ptr;      // used to iterate through the small image
+        
+        /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
+        
+        cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
+        cvNormalize(temp, temp, 1, 0, CV_MINMAX);
+        
+        cvCvtScale(temp, img_1chan, 255);
+//////////////////////// > Potential enhancement in this function
+        maxPixVal = maxPixelValue(img_1chan);
+//////////////////////// <
+        
 #ifdef __TX_DEBUG_IMAGE
       {
         sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_1chan);
         chan_image_publisher.publish(*processed_ros_img);
       }
 #endif
-          
+      
       cvThreshold(img_1chan, img_thresh, maxPixVal - thresh_subtract, 255, CV_THRESH_BINARY);
       
       count = countPixels(img_thresh, 255);
-
+      
+//////////////////////// > The value being compared to count can be calculated once
       if(count >= (img_thresh->height * img_thresh->width) * percent_coverage)
          tooManyPoints = 1;
-
-      if(tooManyPoints)
+//////////////////////// <
+     
+//////////////////////// > Cant we just stop processing here? and send no point cloud or publish an empty one?
+     if(tooManyPoints)
          blackoutImage(img_thresh);
-
+//////////////////////// <
+     
 #ifdef __TX_DEBUG_IMAGE
       {
         sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_thresh);
@@ -140,30 +150,30 @@ void findLinesInImage(IplImage *img) {
 #endif
       
       ptr = (uchar*)img_thresh->imageData;
-
+      
       max = img_thresh->widthStep * img_thresh->height;
-
+      
       sensor_msgs::PointCloud point_cloud;
-
+      
       for(int m=0; m < max; m++) {
          if(ptr[m] != 0) {
-          col_raw = m % img_thresh->widthStep;
-          row_raw = m / img_thresh->widthStep;
-        
-          col = col_raw - 193;
-          row = img_thresh->height - row_raw;
-          
-          geometry_msgs::Point32 found_point;
-          found_point.x = col * PIX_2_M;
-          found_point.y = row * PIX_2_M;
-          found_point.z = 0;
-          point_cloud.points.push_back(found_point);
+            col_raw = m % img_thresh->widthStep;
+            row_raw = m / img_thresh->widthStep;
+            
+            col = col_raw - 193;
+            row = img_thresh->height - row_raw;
+            
+            geometry_msgs::Point32 found_point;
+            found_point.x = col * PIX_2_M;
+            found_point.y = row * PIX_2_M;
+            found_point.z = 0;
+            point_cloud.points.push_back(found_point);
           // place coordinates here: x = col -- y = row -- z = 0
         }
       }
      
       point_cloud_publisher.publish(point_cloud);
-
+      
     //findLRFpoints(img_thresh, img, mags);
     //delete templ;
   }
@@ -173,47 +183,55 @@ void findLinesInImage(IplImage *img) {
 };
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
+//////////////////////// >  Does this need to be done everytime an image is received? If this is for dynamic parameters, can it be done reactively with a callback?
     ros::param::get("/line_processing/thresh_subtract", thresh_subtract);
     ros::param::get("/line_processing/percent_coverage", percent_coverage);
-
+/////////////////////// <
+//////////////////////// > Can this pointer be static and overwritten everytime?
     // Convert the image received into an IPLimage
     IplImage *captured_img;
+//////////////////////// <
     captured_img = bridge_.imgMsgToCv(ros_img);
     
+//////////////////////// > Can this pointer be static and overwritten everytime?
     // create bird's eye view
     IplImage *captured_img_bird;
+//////////////////////// <
+//////////////////////// > Isnt the value returned by captured_img the same everytime, or can it be calculated once with the initial image received?
     captured_img_bird = cvCreateImage(cvGetSize(captured_img), IPL_DEPTH_8U, 3);
-	
+//////////////////////// <
+    
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
     
+//////////////////////// > Can this line be removed and change the findLinesInImage parameter to captured_img_bird? seems like an unneccsary copy
     // Copy the bird's eye image back to the original 
     cvCopy(captured_img_bird, captured_img, NULL);
     
     // Detect lines in the captured image and store the resulting lines
     findLinesInImage(captured_img);
+//////////////////////// <
     
 #ifdef __TX_PROCESSED_IMAGE
     // Convert processed image into ros_img_msg
+//////////////////////// > We need to make sure that these variables are recycled properly
     sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(captured_img_bird);
     sensor_msgs::Image msg(*processed_ros_img);
+//////////////////////// <
     // Publish image to topic /processed_image
     processed_image_publisher.publish(msg);
 #endif
-    
-    // Cleanup
-    // cvReleaseMemStorage(&line_storage);
 }
 
 int main(int argc, char** argv) {
     // Initialize the node
     ros::init(argc, argv, "line_processing");
     n = new ros::NodeHandle;
-
+    
     // load white grass image template
     char dir[FILENAME_MAX]; 
     std::string path;
-
+    
     if (getcwd(dir, sizeof(dir))) { 
       path = std::string(dir) + "/birdeye_convert_mat.xml";
     }
