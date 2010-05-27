@@ -1,5 +1,6 @@
 <launch>
-    <node name="gencam_cu" pkg="gencam_cu" type="gencam_cu" output="log"> 
+    <node name="gencam_cu" pkg="gencam_cu" type="gencam_cu" output="log">
+        <param name="image_hz" value="5" />
         <!-- params go here, if we need to confiugre the usb cam -->
     </node>
     <node name="line_processing" pkg="line_processing" type="line_processing" output="screen">
