@@ -28,7 +28,7 @@ sensor_msgs::CvBridge bridge_;
 // Load the bird's eye view conversion matrix 
 CvMat *birdeye_mat;
 
-IplImage *img_template, *img_1chan, *img_thresh, *temp, *templ;
+IplImage *img_template, *img_1chan, *img_thresh, *temp, *templ, *captured_img_bird;
 
 #ifdef __TX_POINT_CLOUD
 ros::Publisher point_cloud_publisher;
@@ -198,12 +198,10 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     }
     
     // Convert the image received into an IPLimage
-    IplImage *captured_img;
-    captured_img = bridge_.imgMsgToCv(ros_img);
+    IplImage *captured_img = bridge_.imgMsgToCv(ros_img);
     
-    // create bird's eye view
-    IplImage *captured_img_bird = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 3);
-    
+   
+    /*
     std::string path;
     char dir[FILENAME_MAX];
     
@@ -212,7 +210,8 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     }
     
     captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
-     
+    */ 
+
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
     
@@ -285,6 +284,8 @@ int main(int argc, char** argv) {
     img_1chan = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
     img_thresh = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
     temp = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_32F, 1);
+    // create bird's eye view
+    captured_img_bird = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 3);
     
     sequence_count = 0;
     
