@@ -28,7 +28,7 @@ sensor_msgs::CvBridge bridge_;
 // Load the bird's eye view conversion matrix 
 CvMat *birdeye_mat;
 
-IplImage *img_template, *img_1chan, *img_thresh, *temp, *templ, *captured_img_bird;
+IplImage *img_template, *img_1chan, *img_thresh, *temp, *templ, *captured_img_bird, *small;
 
 #ifdef __TX_POINT_CLOUD
 ros::Publisher point_cloud_publisher;
@@ -215,14 +215,14 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
     
-    //cvResize(captured_img_bird, , NULL);
+    cvResize(captured_img_bird, small, NULL);
 //////////////////////// > Can this line be removed and change the findLinesInImage parameter to captured_img_bird? seems like an unneccsary copy
     // // Copy the bird's eye image back to the original 
     // cvCopy(captured_img_bird, captured_img, NULL);
     // 
     // // Detect lines in the captured image and store the resulting lines
     // findLinesInImage(captured_img);
-    findLinesInImage(captured_img_bird);
+    findLinesInImage(small);
 //////////////////////// <
     
 #ifdef __TX_PROCESSED_IMAGE
@@ -285,8 +285,8 @@ int main(int argc, char** argv) {
     img_thresh = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
     temp = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_32F, 1);
     // create bird's eye view
-    captured_img_bird = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 3);
-    
+    captured_img_bird = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 3);
+    small = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 3);
     sequence_count = 0;
     
     // Run until killed
