@@ -1,6 +1,6 @@
 <launch>
-    <node name="gencam_cu" pkg="gencam_cu" type="gencam_cu" output="log">
-        <param name="image_hz" value="5" />
+    <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" args="2>&amp;1 1>/dev/null">
+        <!-- param name="image_hz" value="1" /> -->
         <!-- params go here, if we need to confiugre the usb cam -->
     </node>
     <!-- launch-prefix="valgrind - -tool=callgrind" --> 
@@ -8,6 +8,7 @@
         <param name="birds_eye" value="/home/william/automow/automow/au_automow_vision/line_processing/birdeye_convert_mat.xml" />
         <param name="thresh_subtract" value="50" />
         <param name="percent_coverage" value="0.25" />
+        <remap from="/image_raw" to="/usb_cam/image_raw" />
         <!-- params go here, we need to make some of the settings of the algorithm dynamic -->
     </node>
 </launch>
