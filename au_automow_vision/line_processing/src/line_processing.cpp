@@ -86,6 +86,19 @@ struct make_point_cloud {
   }
 };
 
+
+void invertImage(IplImage *img) {
+	for(int n=0; n < img->height; n++) {
+		uchar *ptr = (uchar*)(img->imageData + n * img->widthStep);
+		//max_height = n;
+		for(int k=0; k < img->width; k++) {
+			ptr[k] = 255 - ptr[k];
+		//	max_width = k;
+		}
+	}
+};
+
+
 inline void blackoutImage(IplImage *img) {
     for (int n = img->height; n != 0; --n) {
         for (int k = img->width; k != 0; --k) {
@@ -137,10 +150,12 @@ void findLinesInImage(IplImage *img) {
 
     /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
 
-    cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
+    //cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
+    cvMatchTemplate(img, templ, temp, CV_TM_SQDIFF);
     cvNormalize(temp, temp, 1, 0, CV_MINMAX);
     
     cvCvtScale(temp, img_1chan, 255);
+    invertImage(img_1chan);
     
     maxPixVal = maxPixelValue(img_1chan);
     
@@ -205,7 +220,7 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     }
     
     // Convert the image received into an IPLimage
-    IplImage *captured_img = bridge_.imgMsgToCv(ros_img);
+    IplImage *captured_img; // = bridge_.imgMsgToCv(ros_img);
     
     std::string path;
     char dir[FILENAME_MAX];
