@@ -14,10 +14,8 @@
   <depend package="roscpp"/>
   <depend package="std_msgs"/>
   <depend package="image_transport"/>
-  <depend package="rospy"/>
-  <depend package="gencam_cu" />
   <export>
-    <cpp cflags="-fprofile-arcs -ftest-coverage" />
+    <!-- <cpp cflags="-fprofile-arcs -ftest-coverage" /> -->
   </export>
 </package>
 

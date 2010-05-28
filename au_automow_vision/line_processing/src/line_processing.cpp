@@ -147,12 +147,10 @@ void findLinesInImage(IplImage *img) {
 
     /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
 
-    //cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
-    cvMatchTemplate(img, templ, temp, CV_TM_SQDIFF);
+    cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
     cvNormalize(temp, temp, 1, 0, CV_MINMAX);
     
     cvCvtScale(temp, img_1chan, 255);
-    invertImage(img_1chan);
     
     maxPixVal = maxPixelValue(img_1chan);
     
@@ -219,14 +217,14 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     // Convert the image received into an IPLimage
     IplImage *captured_img; // = bridge_.imgMsgToCv(ros_img);
     
-    // std::string path;
-    // char dir[FILENAME_MAX];
-    // 
-    // if (getcwd(dir, sizeof(dir))) { 
-    //   path = std::string(dir) + "/frame0004.jpg";
-    // }
-    // 
-    // captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
+    std::string path;
+    char dir[FILENAME_MAX];
+    
+    if (getcwd(dir, sizeof(dir))) { 
+      path = std::string(dir) + "/frame0004.jpg";
+    }
+    
+    captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
     
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
@@ -268,7 +266,7 @@ int main(int argc, char** argv) {
     if (getcwd(dir, sizeof(dir))) { 
       path = std::string(dir) + "/birdeye_convert_mat.xml";
     }
-    
+
     // Load the bird's eye view conversion matrix 
     birdeye_mat = (CvMat*)cvLoad(path.c_str());
     if (birdeye_mat == NULL) { 
@@ -278,7 +276,7 @@ int main(int argc, char** argv) {
     // Register the node handle with the image transport
     image_transport::ImageTransport it(*n);
     // Set the image buffer to 1 so that we process the latest image always
-    image_transport::Subscriber sub = it.subscribe("/image_raw", 1, imageReceived);
+    image_transport::Subscriber sub = it.subscribe("/usb_cam/image_raw", 1, imageReceived);
     point_cloud_publisher = n->advertise<sensor_msgs::PointCloud>("image_point_cloud", 5);
 #ifdef __TX_PROCESSED_IMAGE
     processed_image_publisher = n->advertise<sensor_msgs::Image>("processed_image", 1);
