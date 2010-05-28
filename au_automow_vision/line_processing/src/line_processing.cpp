@@ -15,7 +15,7 @@
 #include <cv.h>
 #include <list>
 
-#define PIX_2_M 0.00377
+#define PIX_2_M 0.00377 * 5
 
 // Uncomment this line to have the lines drawn on the original image and transmitted
 #define __TX_POINT_CLOUD
@@ -28,7 +28,7 @@ sensor_msgs::CvBridge bridge_;
 // Load the bird's eye view conversion matrix 
 CvMat *birdeye_mat;
 
-IplImage *img_template, *img_1chan, *img_thresh, *temp, *templ, *captured_img_bird, *small;
+IplImage *img_template, *img_1chan, *img_thresh, *temp, *templ, *captured_img_bird;
 
 #ifdef __TX_POINT_CLOUD
 ros::Publisher point_cloud_publisher;
@@ -55,28 +55,34 @@ struct make_point_cloud {
   int start;
   int end;
   sensor_msgs::PointCloud::_points_type points;
-  make_point_cloud(const uchar* ptr, int start, int end) : ptr(ptr), start(start), end(end) { }
+  make_point_cloud(const uchar* ptr, int row_start, int row_end) : ptr(ptr), start(row_start), end(row_end) { }
   void operator() () {
-      for(int m = start; m < end; m++) {
-        if(ptr[m] != 0) {
-          uchar col_raw = m % img_thresh->widthStep;
-          uchar row_raw = m / img_thresh->widthStep;
-          
-          uchar col = col_raw - 193;
-          uchar row = img_thresh->height - row_raw;
-          
-          geometry_msgs::Point32 found_point;
-          found_point.x = col * PIX_2_M;
-          found_point.y = row * PIX_2_M;
-          found_point.z = 0;
-          points.push_back(found_point);
+    for (int n = start; n < end; n += 5) {
+      for (int k = 1; k < img_thresh->width; k += 5) {
+        bool leave_loop = true;
+        // ROS_INFO_STREAM("Row: " << n);
+        for (int i = 5; leave_loop && i != 0; --i) {
+          for (int g = 5; leave_loop && g != 0; --g) {
+            if (ptr[n * img_thresh->widthStep + k] != 0) {
+              int col = k + g - 193;
+              int row = img_thresh->height - n + i;
+              
+              geometry_msgs::Point32 found_point;
+              found_point.x = col * PIX_2_M;
+              found_point.y = row * PIX_2_M;
+              found_point.z = 0;
+              points.push_back(found_point);
+              leave_loop = false;
+            }
+          }
         }
       }
-      boost::mutex::scoped_lock lock(write_mux);
-      while (!points.empty()) {
-        g_points.push_back(points.back());
-        points.pop_back();
-      }
+    }
+    boost::mutex::scoped_lock lock(write_mux);
+    while (!points.empty()) {
+      g_points.push_back(points.back());
+      points.pop_back();
+    }
   }
 };
 
@@ -149,7 +155,7 @@ void findLinesInImage(IplImage *img) {
     
     count = countPixels(img_thresh, 255, (img_thresh->height * img_thresh->width) * percent_coverage);
    
-    if(count == (img_thresh->height * img_thresh->width) * percent_coverage)
+    if (count == (img_thresh->height * img_thresh->width) * percent_coverage)
         tooManyPoints = 1;
     
 #ifdef __TX_DEBUG_IMAGE
@@ -167,15 +173,14 @@ void findLinesInImage(IplImage *img) {
     
     point_cloud.header.frame_id = "camera_frame";
     point_cloud.header.stamp = ros::Time::now();
-    
+   
     if (!tooManyPoints) {
-        make_point_cloud x(ptr, 0, max);
-        int one_fifth = max/5;
-        boost::thread calc1(make_point_cloud(ptr, 0, one_fifth));
-        boost::thread calc2(make_point_cloud(ptr, one_fifth+1, one_fifth*2));
-        boost::thread calc3(make_point_cloud(ptr, (one_fifth * 2) + 1, one_fifth * 3));
-        boost::thread calc4(make_point_cloud(ptr, (one_fifth * 3) + 1, one_fifth * 4));
-        boost::thread calc5(make_point_cloud(ptr, (one_fifth * 4) + 1, max));
+        int one_fifth = 440 / 5;
+        boost::thread calc1(make_point_cloud(ptr, 0, one_fifth - 1));
+        boost::thread calc2(make_point_cloud(ptr, (one_fifth * 1), (one_fifth * 2) - 1));
+        boost::thread calc3(make_point_cloud(ptr, (one_fifth * 2), (one_fifth * 3) - 1));
+        boost::thread calc4(make_point_cloud(ptr, (one_fifth * 3), (one_fifth * 4) - 1));
+        boost::thread calc5(make_point_cloud(ptr, (one_fifth * 4), 440));
         calc5.join();
         calc4.join();
         calc3.join();
@@ -184,6 +189,8 @@ void findLinesInImage(IplImage *img) {
 
         point_cloud.points = g_points;
     }
+
+    ROS_INFO_STREAM("Point Count: " << g_points.size());
     
     point_cloud_publisher.publish(point_cloud);
 };
@@ -200,8 +207,6 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     // Convert the image received into an IPLimage
     IplImage *captured_img = bridge_.imgMsgToCv(ros_img);
     
-   
-    /*
     std::string path;
     char dir[FILENAME_MAX];
     
@@ -210,19 +215,19 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     }
     
     captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
-    */ 
+     
 
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
     
-    cvResize(captured_img_bird, small, NULL);
+    //cvResize(captured_img_bird, , NULL);
 //////////////////////// > Can this line be removed and change the findLinesInImage parameter to captured_img_bird? seems like an unneccsary copy
     // // Copy the bird's eye image back to the original 
     // cvCopy(captured_img_bird, captured_img, NULL);
     // 
     // // Detect lines in the captured image and store the resulting lines
     // findLinesInImage(captured_img);
-    findLinesInImage(small);
+    findLinesInImage(captured_img_bird);
 //////////////////////// <
     
 #ifdef __TX_PROCESSED_IMAGE
@@ -278,7 +283,7 @@ int main(int argc, char** argv) {
     
     templ = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
     // Create image for the template matching output
-    img_template = cvCreateImage(cvSize(320 - templ->width + 1, 240 - templ->height + 1), IPL_DEPTH_8U, 3);
+    img_template = cvCreateImage(cvSize(640 - templ->width + 1, 480 - templ->height + 1), IPL_DEPTH_8U, 3);
     
     // image pointers
     img_1chan = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
@@ -286,7 +291,7 @@ int main(int argc, char** argv) {
     temp = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_32F, 1);
     // create bird's eye view
     captured_img_bird = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 3);
-    small = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 3);
+    
     sequence_count = 0;
     
     // Run until killed
