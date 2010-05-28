@@ -181,16 +181,16 @@ void findLinesInImage(IplImage *img) {
         boost::thread calc3(make_point_cloud(ptr, (one_fifth * 2), (one_fifth * 3) - 1));
         boost::thread calc4(make_point_cloud(ptr, (one_fifth * 3), (one_fifth * 4) - 1));
         boost::thread calc5(make_point_cloud(ptr, (one_fifth * 4), 440));
-        calc5.join();
-        calc4.join();
-        calc3.join();
-        calc2.join();
         calc1.join();
+        calc2.join();
+        calc3.join();
+        calc4.join();
+        calc5.join();
 
         point_cloud.points = g_points;
     }
 
-    ROS_INFO_STREAM("Point Count: " << g_points.size());
+    ROS_DEBUG_STREAM("Point Count: " << g_points.size());
     
     point_cloud_publisher.publish(point_cloud);
 };
