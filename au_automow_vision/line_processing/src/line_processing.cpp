@@ -12,6 +12,7 @@
 #include <highgui.h>
 #include <cv.h>
 #include <list>
+#include "line_processing/LineProcessingControl.h"
 
 #define PIX_2_M 0.000377 * 5
 
@@ -44,6 +45,7 @@ ros::NodeHandle *n;
 int thresh_subtract;
 double percent_coverage;
 short sequence_count;
+uint8_t enabled;
 sensor_msgs::PointCloud::_points_type g_points;
 boost::mutex write_mux;
 
@@ -83,7 +85,6 @@ struct make_point_cloud {
   }
 };
 
-
 void invertImage(IplImage *img) {
 	for(int n=0; n < img->height; n++) {
 		uchar *ptr = (uchar*)(img->imageData + n * img->widthStep);
@@ -95,6 +96,11 @@ void invertImage(IplImage *img) {
 	}
 };
 
+bool lineProcessingControl(line_processing::LineProcessingControl::Request &request, line_processing::LineProcessingControl::Response &response) {
+    enabled = request.enable;
+    response.result = true;
+    return true;
+}
 
 inline void blackoutImage(IplImage *img) {
     for (int n = img->height; n != 0; --n) {
@@ -135,6 +141,9 @@ uchar maxPixelValue(IplImage *img) {
 };
 
 void findLinesInImage(IplImage *img) {
+    if (!enabled)
+        return;
+    
     int maxPixVal;
     
     // plain grass detection
@@ -255,6 +264,9 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "line_processing");
     n = new ros::NodeHandle;
     
+    // Setup enable/disable Service
+    ros::ServiceServer service = n->advertiseService("lineProcessingControl", lineProcessingControl);
+    
     ros::param::get("/line_processing/thresh_subtract", thresh_subtract);
     ros::param::get("/line_processing/percent_coverage", percent_coverage);
     sequence_count = 0;
@@ -302,6 +314,7 @@ int main(int argc, char** argv) {
     captured_img_bird = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 3);
     
     sequence_count = 0;
+    enabled = true;
     
     // Run until killed
     ros::spin();
