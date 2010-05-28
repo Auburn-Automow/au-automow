@@ -1,5 +1,3 @@
-//////////////////////// > There are alot of images that need to be double checked that they are garbage collected.
-//////////////////////// <
 #include <ros/param.h>
 #include <string>
 #include <iostream>
@@ -15,13 +13,12 @@
 #include <cv.h>
 #include <list>
 
-#define PIX_2_M 0.00377 * 5
+#define PIX_2_M 0.000377 * 5
 
 // Uncomment this line to have the lines drawn on the original image and transmitted
 #define __TX_POINT_CLOUD
 #define __TX_PROCESSED_IMAGE
 #define __TX_DEBUG_IMAGE
-#define __INVERT_GRAYSCALE
 
 sensor_msgs::CvBridge bridge_;
 
@@ -170,7 +167,7 @@ void findLinesInImage(IplImage *img) {
     
     count = countPixels(img_thresh, 255, (img_thresh->height * img_thresh->width) * percent_coverage);
    
-    if (count == (img_thresh->height * img_thresh->width) * percent_coverage)
+    if (count >= (img_thresh->height * img_thresh->width) * percent_coverage)
         tooManyPoints = 1;
     
 #ifdef __TX_DEBUG_IMAGE
@@ -222,16 +219,15 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     // Convert the image received into an IPLimage
     IplImage *captured_img; // = bridge_.imgMsgToCv(ros_img);
     
-    std::string path;
-    char dir[FILENAME_MAX];
+    // std::string path;
+    // char dir[FILENAME_MAX];
+    // 
+    // if (getcwd(dir, sizeof(dir))) { 
+    //   path = std::string(dir) + "/frame0004.jpg";
+    // }
+    // 
+    // captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
     
-    if (getcwd(dir, sizeof(dir))) { 
-      path = std::string(dir) + "/frame0004.jpg";
-    }
-    
-    captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
-     
-
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
     
