@@ -13,6 +13,8 @@
 #include <cv.h>
 #include <list>
 #include "line_processing/LineProcessingControl.h"
+#include <dynamic_reconfigure/server.h>
+#include "line_processing/LineProcessingConfig.h"
 
 #define PIX_2_M 0.000377 * 5
 
@@ -53,6 +55,9 @@ short sequence_count;
 uint8_t enabled;
 sensor_msgs::PointCloud::_points_type g_points;
 boost::mutex write_mux;
+
+// These are Dynamic Configurations
+uint8_t STOCK_IMAGE_ENABLED;
 
 struct make_point_cloud {
   const uchar* ptr;
@@ -280,6 +285,18 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
 #endif
 }
 
+void dynamicReconfigureCallback(line_processing::LineProcessingConfig &config, uint32_t level) {
+    STOCK_IMAGE_ENABLE      = config.stock_image_enabled;
+    STOCK_IMAGE_PATH        = config.stock_image;
+    BRIGHTNESS_THRESHOLD    = config.brightness_threshold;
+    HISTOGRAM_ENABLED       = config.histogram_enabled;
+    HOUGH1_MIN_POINTS       = config.hough1_min_points;
+    HOUGH1_MAX_SPACING      = config.hough1_max_spacing;
+    HOUGH2_ENABLED          = config.hough2_enabled;
+    HOUGH2_MIN_POINTS       = config.hough2_min_points;
+    HOUGH2_MAX_SPACING      = config.hough2_max_spacing;
+}
+
 int main(int argc, char** argv) {
     // Initialize the node
     ros::init(argc, argv, "line_processing");
@@ -337,6 +354,11 @@ int main(int argc, char** argv) {
     
     sequence_count = 0;
     enabled = true;
+    
+    // Initialize dynamic defaults
+    dynamic_reconfigure::Server<line_processing::LineProcessingConfig> srv;
+    dynamic_reconfigure::Server<line_processing::LineProcessingConfig>::CallbackType f = boost::bind(&dynamicReconfigureCallback, _1, _2);
+    srv.setCallback(f);
     
     // Run until killed
     ros::spin();
