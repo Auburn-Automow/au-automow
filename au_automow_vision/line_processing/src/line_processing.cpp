@@ -20,13 +20,15 @@
 #define __TX_POINT_CLOUD
 #define __TX_PROCESSED_IMAGE
 #define __TX_DEBUG_IMAGE
+#define __SECONDARY_HOUGHLINE
+#define __STOCK_IMAGE
 
 sensor_msgs::CvBridge bridge_;
 
 // Load the bird's eye view conversion matrix 
 CvMat *birdeye_mat;
 
-IplImage *captured_img_bird, *b_plane, *g_plane, *r_plane, img_lines;
+IplImage *captured_img_bird, *b_plane, *g_plane, *r_plane, *img_lines;
 CvMemStorage *storage;
 CvSeq *lines;
 CvPoint pt1, pt2;
@@ -89,14 +91,14 @@ struct make_point_cloud {
 };
 
 void invertImage(IplImage *img) {
-	for(int n=0; n < img->height; n++) {
-		uchar *ptr = (uchar*)(img->imageData + n * img->widthStep);
-		//max_height = n;
-		for(int k=0; k < img->width; k++) {
-			ptr[k] = 255 - ptr[k];
-		//	max_width = k;
-		}
-	}
+    for(int n=0; n < img->height; n++) {
+        uchar *ptr = (uchar*)(img->imageData + n * img->widthStep);
+        //max_height = n;
+        for(int k=0; k < img->width; k++) {
+            ptr[k] = 255 - ptr[k];
+        //  max_width = k;
+        }
+    }
 };
 
 bool lineProcessingControl(line_processing::LineProcessingControl::Request &request, line_processing::LineProcessingControl::Response &response) {
@@ -150,34 +152,53 @@ void findLinesInImage(IplImage *img) {
     // values for determining coordinates for point cloud
     int max = 0; //img_small->widthStep * img_small->height;
     uchar *ptr;      // used to iterate through the small image
-
+    
     /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
-	
-	cvCvtPixToPlane(img, b_plane, g_plane, r_plane); //split image into channel planes
-	cvEqualizeHist(b_plane, b_plane);	//spread the values of the blue plane
-	
-	// threshold the blue plane to reduce the viable points for Hough
+    
+    cvCvtPixToPlane(img, b_plane, g_plane, r_plane, 0); //split image into channel planes
+    cvEqualizeHist(b_plane, b_plane);   //spread the values of the blue plane
+    
+    // threshold the blue plane to reduce the viable points for Hough
     cvThreshold(b_plane, b_plane, 230, 255, CV_THRESH_TOZERO);
-	
-	// perform probabalistic Hough transform:
-	// 4th arg: rho resolution
-	// 5th arg: theta resolution
-	// 6th arg: # of colinear points needed for line
-	// 7th arg: max pixel spacing allowed between points on a line
-	lines = cvHoughLines2(b_plane, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, 50, 2);
-	
-	if (lines->total != 0) {
-		for (int n=0; n < lines->total; n++){
-			line = (int*)cvGetSeqElem(lines, n);
-			
-			pt1.x = line[0];
-			pt1.y = line[1];
-			pt2.x = line[2];
-			pt2.y = line[3];
-			
-			cvLine(img_lines, pt1, pt2, cvScalar(0, 0, 255, 0), 2, CV_AA, 0);
-		}
-	}
+    
+    // perform probabalistic Hough transform:
+    // 4th arg: rho resolution
+    // 5th arg: theta resolution
+    // 6th arg: # of colinear points needed for line
+    // 7th arg: max pixel spacing allowed between points on a line
+    lines = cvHoughLines2(b_plane, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, 10, 2);
+    
+    if (lines->total != 0) {
+        for (int n=0; n < lines->total; n++) {
+            int *line = (int*)cvGetSeqElem(lines, n);
+            
+            pt1.x = line[0];
+            pt1.y = line[1];
+            pt2.x = line[2];
+            pt2.y = line[3];
+            
+            cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 2, CV_AA, 0);
+        }
+    }
+#ifdef __SECONDARY_HOUGHLINE
+    cvClearSeq(lines);
+    cvClearMemStorage(storage);
+    lines = cvHoughLines2(img_lines, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, 150, 20);
+    cvZero(img_lines);
+    
+    if (lines->total != 0) {
+        for (int n=0; n < lines->total; n++) {
+            int *line = (int*)cvGetSeqElem(lines, n);
+            
+            pt1.x = line[0];
+            pt1.y = line[1];
+            pt2.x = line[2];
+            pt2.y = line[3];
+            
+            cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 2, CV_AA, 0);
+        }
+    }
+#endif
     
 #ifdef __TX_DEBUG_IMAGE
 {
@@ -203,12 +224,12 @@ void findLinesInImage(IplImage *img) {
     point_cloud.header.stamp = ros::Time::now();
    
     if (lines->total != 0) {
-        int one_fifth = 440 / 5;
+        int one_fifth = 480 / 5;
         boost::thread calc1(make_point_cloud(ptr, 0, one_fifth - 1));
         boost::thread calc2(make_point_cloud(ptr, (one_fifth * 1), (one_fifth * 2) - 1));
         boost::thread calc3(make_point_cloud(ptr, (one_fifth * 2), (one_fifth * 3) - 1));
         boost::thread calc4(make_point_cloud(ptr, (one_fifth * 3), (one_fifth * 4) - 1));
-        boost::thread calc5(make_point_cloud(ptr, (one_fifth * 4), 440));
+        boost::thread calc5(make_point_cloud(ptr, (one_fifth * 4), 480));
         calc1.join();
         calc2.join();
         calc3.join();
@@ -221,10 +242,10 @@ void findLinesInImage(IplImage *img) {
     ROS_DEBUG_STREAM("Point Count: " << g_points.size());
     
     point_cloud_publisher.publish(point_cloud);
-	
-	cvZero(img_lines);
-	cvClearSeq(lines);
-	cvClearMemStorage(storage);
+    
+    cvZero(img_lines);
+    cvClearSeq(lines);
+    cvClearMemStorage(storage);
 };
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
@@ -238,6 +259,10 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     
     // Convert the image received into an IPLimage
     IplImage *captured_img = bridge_.imgMsgToCv(ros_img);
+    
+#ifdef __STOCK_IMAGE
+    captured_img = cvLoadImage("/home/william/stock_img1.jpg", CV_LOAD_IMAGE_UNCHANGED);
+#endif
     
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
@@ -302,12 +327,13 @@ int main(int argc, char** argv) {
     b_plane = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 1);
     g_plane = cvCreateImage(cvGetSize(b_plane), IPL_DEPTH_8U, 1);
     r_plane = cvCreateImage(cvGetSize(b_plane), IPL_DEPTH_8U, 1);
-	
+    img_lines = cvCreateImage(cvGetSize(b_plane), IPL_DEPTH_8U, 1);
+    
     // create bird's eye view
     captured_img_bird = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 3);
-							
-	// create memory storage for lines returned by Hough
-	storage = cvCreateMemStorage(0);
+                            
+    // create memory storage for lines returned by Hough
+    storage = cvCreateMemStorage(0);
     
     sequence_count = 0;
     enabled = true;
