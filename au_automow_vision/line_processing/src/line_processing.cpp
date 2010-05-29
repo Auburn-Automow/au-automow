@@ -85,6 +85,17 @@ struct make_point_cloud {
   }
 };
 
+void invertImage(IplImage *img) {
+	for(int n=0; n < img->height; n++) {
+		uchar *ptr = (uchar*)(img->imageData + n * img->widthStep);
+		//max_height = n;
+		for(int k=0; k < img->width; k++) {
+			ptr[k] = 255 - ptr[k];
+		//	max_width = k;
+		}
+	}
+};
+
 bool lineProcessingControl(line_processing::LineProcessingControl::Request &request, line_processing::LineProcessingControl::Response &response) {
     enabled = request.enable;
     response.result = true;
@@ -213,16 +224,16 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     }
     
     // Convert the image received into an IPLimage
-    IplImage *captured_img = bridge_.imgMsgToCv(ros_img);
+    IplImage *captured_img; // = bridge_.imgMsgToCv(ros_img);
     
-    // std::string path;
-    // char dir[FILENAME_MAX];
-    // 
-    // if (getcwd(dir, sizeof(dir))) { 
-    //   path = std::string(dir) + "/frame0004.jpg";
-    // }
-    // 
-    // captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
+    std::string path;
+    char dir[FILENAME_MAX];
+    
+    if (getcwd(dir, sizeof(dir))) { 
+      path = std::string(dir) + "/frame0004.jpg";
+    }
+    
+    captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
     
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
@@ -267,7 +278,7 @@ int main(int argc, char** argv) {
     if (getcwd(dir, sizeof(dir))) { 
       path = std::string(dir) + "/birdeye_convert_mat.xml";
     }
-    
+
     // Load the bird's eye view conversion matrix 
     birdeye_mat = (CvMat*)cvLoad(path.c_str());
     if (birdeye_mat == NULL) { 
@@ -277,7 +288,7 @@ int main(int argc, char** argv) {
     // Register the node handle with the image transport
     image_transport::ImageTransport it(*n);
     // Set the image buffer to 1 so that we process the latest image always
-    image_transport::Subscriber sub = it.subscribe("/image_raw", 1, imageReceived);
+    image_transport::Subscriber sub = it.subscribe("/usb_cam/image_raw", 1, imageReceived);
     point_cloud_publisher = n->advertise<sensor_msgs::PointCloud>("image_point_cloud", 5);
 #ifdef __TX_PROCESSED_IMAGE
     processed_image_publisher = n->advertise<sensor_msgs::Image>("processed_image", 1);

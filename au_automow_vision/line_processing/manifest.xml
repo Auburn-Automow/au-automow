@@ -18,7 +18,7 @@
   <depend package="usb_cam"/>
   <!-- <depend package="gencam_cu" /> -->
   <export>
-    <cpp cflags="-fprofile-arcs -ftest-coverage" />
+    <!-- <cpp cflags="-fprofile-arcs -ftest-coverage" /> -->
   </export>
 </package>
 
