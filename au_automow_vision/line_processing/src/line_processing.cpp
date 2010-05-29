@@ -26,7 +26,10 @@ sensor_msgs::CvBridge bridge_;
 // Load the bird's eye view conversion matrix 
 CvMat *birdeye_mat;
 
-IplImage *img_template, *img_1chan, *img_thresh, *temp, *templ, *captured_img_bird;
+IplImage *captured_img_bird, *b_plane, *g_plane, *r_plane, img_lines;
+CvMemStorage *storage;
+CvSeq *lines;
+CvPoint pt1, pt2;
 
 #ifdef __TX_POINT_CLOUD
 ros::Publisher point_cloud_publisher;
@@ -37,8 +40,8 @@ ros::Publisher processed_image_publisher;
 #endif
 
 #ifdef __TX_DEBUG_IMAGE
-ros::Publisher temp_match_image_publisher;
-ros::Publisher chan_image_publisher;
+ros::Publisher blue_plane_image_publisher;
+ros::Publisher lines_image_publisher;
 #endif
 
 ros::NodeHandle *n;
@@ -57,14 +60,14 @@ struct make_point_cloud {
   make_point_cloud(const uchar* ptr, int row_start, int row_end) : ptr(ptr), start(row_start), end(row_end) { }
   void operator() () {
     for (int n = start; n < end; n += 5) {
-      for (int k = 1; k < img_thresh->width; k += 5) {
+      for (int k = 1; k < img_lines->width; k += 5) {
         bool leave_loop = true;
         // ROS_INFO_STREAM("Row: " << n);
         for (int i = 5; leave_loop && i != 0; --i) {
           for (int g = 5; leave_loop && g != 0; --g) {
-            if (ptr[n * img_thresh->widthStep + k] != 0) {
+            if (ptr[n * img_lines->widthStep + k] != 0) {
               int col = k + g - 193;
-              int row = img_thresh->height - n + i;
+              int row = img_lines->height - n + i;
               
               geometry_msgs::Point32 found_point;
               found_point.x = col * PIX_2_M;
@@ -144,56 +147,62 @@ void findLinesInImage(IplImage *img) {
     if (!enabled)
         return;
     
-    int maxPixVal;
-    
-    // plain grass detection
-    long long int count = 0;
-    int tooManyPoints = 0;
-    
     // values for determining coordinates for point cloud
     int max = 0; //img_small->widthStep * img_small->height;
     uchar *ptr;      // used to iterate through the small image
 
     /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
-
-    cvMatchTemplate(img, templ, temp, CV_TM_CCORR);
-    cvNormalize(temp, temp, 1, 0, CV_MINMAX);
-    
-    cvCvtScale(temp, img_1chan, 255);
-    
-    maxPixVal = maxPixelValue(img_1chan);
+	
+	cvCvtPixToPlane(img, b_plane, g_plane, r_plane); //split image into channel planes
+	cvEqualizeHist(b_plane, b_plane);	//spread the values of the blue plane
+	
+	// threshold the blue plane to reduce the viable points for Hough
+    cvThreshold(b_plane, b_plane, 230, 255, CV_THRESH_TOZERO);
+	
+	// perform probabalistic Hough transform:
+	// 4th arg: rho resolution
+	// 5th arg: theta resolution
+	// 6th arg: # of colinear points needed for line
+	// 7th arg: max pixel spacing allowed between points on a line
+	lines = cvHoughLines2(b_plane, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, 50, 2);
+	
+	if (lines->total != 0) {
+		for (int n=0; n < lines->total; n++){
+			line = (int*)cvGetSeqElem(lines, n);
+			
+			pt1.x = line[0];
+			pt1.y = line[1];
+			pt2.x = line[2];
+			pt2.y = line[3];
+			
+			cvLine(img_lines, pt1, pt2, cvScalar(0, 0, 255, 0), 2, CV_AA, 0);
+		}
+	}
     
 #ifdef __TX_DEBUG_IMAGE
 {
-    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_1chan);
-    chan_image_publisher.publish(*processed_ros_img);
+    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_lines);
+    lines_image_publisher.publish(*processed_ros_img);
 }
 #endif
-
-    cvThreshold(img_1chan, img_thresh, maxPixVal - thresh_subtract, 255, CV_THRESH_BINARY);
-    
-    count = countPixels(img_thresh, 255, (img_thresh->height * img_thresh->width) * percent_coverage);
-   
-    if (count >= (img_thresh->height * img_thresh->width) * percent_coverage)
-        tooManyPoints = 1;
     
 #ifdef __TX_DEBUG_IMAGE
 {
-    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(img_thresh);
-    temp_match_image_publisher.publish(*processed_ros_img);
+    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(b_plane);
+    blue_plane_image_publisher.publish(*processed_ros_img);
 }
 #endif
     
-    ptr = (uchar*)img_thresh->imageData;
+    ptr = (uchar*)img_lines->imageData;
     
-    max = img_thresh->widthStep * img_thresh->height;
+    max = img_lines->widthStep * img_lines->height;
     
     sensor_msgs::PointCloud point_cloud;
     
     point_cloud.header.frame_id = "camera_frame";
     point_cloud.header.stamp = ros::Time::now();
    
-    if (!tooManyPoints) {
+    if (lines->total != 0) {
         int one_fifth = 440 / 5;
         boost::thread calc1(make_point_cloud(ptr, 0, one_fifth - 1));
         boost::thread calc2(make_point_cloud(ptr, (one_fifth * 1), (one_fifth * 2) - 1));
@@ -212,6 +221,10 @@ void findLinesInImage(IplImage *img) {
     ROS_DEBUG_STREAM("Point Count: " << g_points.size());
     
     point_cloud_publisher.publish(point_cloud);
+	
+	cvZero(img_lines);
+	cvClearSeq(lines);
+	cvClearMemStorage(storage);
 };
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
@@ -224,29 +237,12 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     }
     
     // Convert the image received into an IPLimage
-    IplImage *captured_img; // = bridge_.imgMsgToCv(ros_img);
-    
-    std::string path;
-    char dir[FILENAME_MAX];
-    
-    if (getcwd(dir, sizeof(dir))) { 
-      path = std::string(dir) + "/frame0004.jpg";
-    }
-    
-    captured_img = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
+    IplImage *captured_img = bridge_.imgMsgToCv(ros_img);
     
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
     
-    //cvResize(captured_img_bird, , NULL);
-//////////////////////// > Can this line be removed and change the findLinesInImage parameter to captured_img_bird? seems like an unneccsary copy
-    // // Copy the bird's eye image back to the original 
-    // cvCopy(captured_img_bird, captured_img, NULL);
-    // 
-    // // Detect lines in the captured image and store the resulting lines
-    // findLinesInImage(captured_img);
     findLinesInImage(captured_img_bird);
-//////////////////////// <
     
 #ifdef __TX_PROCESSED_IMAGE
     // Convert processed image into ros_img_msg
@@ -294,24 +290,24 @@ int main(int argc, char** argv) {
     processed_image_publisher = n->advertise<sensor_msgs::Image>("processed_image", 1);
 #endif
 #ifdef __TX_DEBUG_IMAGE
-    temp_match_image_publisher = n->advertise<sensor_msgs::Image>("temp_match_image", 1);
-    chan_image_publisher = n->advertise<sensor_msgs::Image>("chan_image", 1);
+    blue_plane_image_publisher = n->advertise<sensor_msgs::Image>("blue_plane", 1);
+    lines_image_publisher = n->advertise<sensor_msgs::Image>("lines_image", 1);
 #endif
    
     if (getcwd(dir, sizeof(dir))) { 
       path = std::string(dir) + "/template_jpg.jpg";
     }
     
-    templ = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_UNCHANGED);
-    // Create image for the template matching output
-    img_template = cvCreateImage(cvSize(640 - templ->width + 1, 480 - templ->height + 1), IPL_DEPTH_8U, 3);
-    
     // image pointers
-    img_1chan = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
-    img_thresh = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_8U, 1);
-    temp = cvCreateImage(cvGetSize(img_template), IPL_DEPTH_32F, 1);
+    b_plane = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 1);
+    g_plane = cvCreateImage(cvGetSize(b_plane), IPL_DEPTH_8U, 1);
+    r_plane = cvCreateImage(cvGetSize(b_plane), IPL_DEPTH_8U, 1);
+	
     // create bird's eye view
     captured_img_bird = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 3);
+							
+	// create memory storage for lines returned by Hough
+	storage = cvCreateMemStorage(0);
     
     sequence_count = 0;
     enabled = true;
