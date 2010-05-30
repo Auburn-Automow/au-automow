@@ -14,7 +14,7 @@
 #include <list>
 #include "line_processing/LineProcessingControl.h"
 #include <dynamic_reconfigure/server.h>
-#include "line_processing/LineProcessingConfig.h"
+#include "line_processing/line_processingConfig.h"
 
 #define PIX_2_M 0.000377 * 5
 
@@ -49,15 +49,25 @@ ros::Publisher lines_image_publisher;
 #endif
 
 ros::NodeHandle *n;
-int thresh_subtract;
-double percent_coverage;
-short sequence_count;
 uint8_t enabled;
 sensor_msgs::PointCloud::_points_type g_points;
 boost::mutex write_mux;
 
 // These are Dynamic Configurations
-uint8_t STOCK_IMAGE_ENABLED;
+bool STOCK_IMAGE_ENABLED;
+const char *STOCK_IMAGE_PATH;
+int BRIGHTNESS_THRESHOLD;
+bool HISTOGRAM_ENABLED;
+int HOUGH1_MIN_POINTS;
+int HOUGH1_MAX_SPACING;
+bool HOUGH2_ENABLED;
+int HOUGH2_MIN_POINTS;
+int HOUGH2_MAX_SPACING;
+
+struct window_density {
+    uchar *index;
+    int density;
+};
 
 struct make_point_cloud {
   const uchar* ptr;
@@ -106,6 +116,44 @@ void invertImage(IplImage *img) {
     }
 };
 
+void binaryPixelDensityFinder(IplImage *img, int window_height, int window_width, struct window_density window_densities[]) {
+    int density = 0;
+    int index = 0;
+    
+    for(int n=0; n < img->height; n+=window_height) { // shift down rows to next row-window
+        uchar *ptr1 = (uchar*)(img->imageData + n*img->widthStep);
+        
+        for(int m=0; m < img->width; m+=window_width) { // shift along columns to next window
+            uchar *ptr2 = ptr1 + m;
+            
+            for(int k=0; k < window_height; k++) { // shift down by single rows within window
+                uchar *ptr3 = ptr2 + k*img->widthStep; 
+                
+                for(int w=0; w < window_width; w++) // sum along columns in row
+                    density+= *(ptr3+w);
+            }
+            
+            window_densities[index].index = ptr2;
+            window_densities[index++].density = density;
+            
+            density = 0;
+        }
+    }
+};
+
+void DensityFilter(struct window_density densities[], int max_density, int window_height, int window_width, int widthStep, int max_windows) {
+    for(int n=0; n < max_windows; n++) {
+        if(densities[n].density < max_density*0.6) {
+            for(int k=0; k < window_height; k++) {
+                uchar *ptr = densities[n].index + k*widthStep;
+                
+                for(int m=0; m < window_width; m++)
+                    *(ptr+m) = 0;
+            }
+        }
+    }
+};
+
 bool lineProcessingControl(line_processing::LineProcessingControl::Request &request, line_processing::LineProcessingControl::Response &response) {
     enabled = request.enable;
     response.result = true;
@@ -150,9 +198,45 @@ uchar maxPixelValue(IplImage *img) {
   return max;
 };
 
+// void reduceNoise(IplImage *img) {
+//     assert(img->width%16 == 0 && img->height%16 == 0);
+//     for(int i = img->width/16; i > 0; --i) {
+//         
+//     }
+//     for (int n = 0; n < img->; n += 5) {
+//       for (int k = 1; k < img_lines->width; k += 5) {
+//         bool leave_loop = true;
+//         // ROS_INFO_STREAM("Row: " << n);
+//         for (int i = 5; leave_loop && i != 0; --i) {
+//           for (int g = 5; leave_loop && g != 0; --g) {
+//             if (ptr[n * img_lines->widthStep + k] != 0) {
+//               int col = k + g - 193;
+//               int row = img_lines->height - n + i;
+//               
+//               geometry_msgs::Point32 found_point;
+//               found_point.x = col * PIX_2_M;
+//               found_point.y = row * PIX_2_M;
+//               found_point.z = 0;
+//               points.push_back(found_point);
+//               leave_loop = false;
+//             }
+//           }
+//         }
+//       }
+//     }
+// }
+
 void findLinesInImage(IplImage *img) {
     if (!enabled)
         return;
+    
+    // window density variables
+	int window_height = 20;
+	int window_width = 20;
+	int max_windows;
+	float percent_coverage = 1;
+	int min_density = ( window_height * window_width ) * percent_coverage * 255;
+    struct window_density densities[1201];
     
     // values for determining coordinates for point cloud
     int max = 0; //img_small->widthStep * img_small->height;
@@ -160,18 +244,29 @@ void findLinesInImage(IplImage *img) {
     
     /////////////////////////////////////// Begin Line Detection /////////////////////////////////////////
     
-    cvCvtPixToPlane(img, b_plane, g_plane, r_plane, 0); //split image into channel planes
-    cvEqualizeHist(b_plane, b_plane);   //spread the values of the blue plane
+    // cvCvtPixToPlane(img, b_plane, g_plane, r_plane, 0); //split image into channel planes
+    cvCvtColor(img, b_plane, CV_RGB2GRAY);
+    if (HISTOGRAM_ENABLED)
+        cvEqualizeHist(b_plane, b_plane);   //spread the values of the blue plane
+    
+    max_windows = ( b_plane->height / window_height ) * ( b_plane->width / window_width );
+    
+    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(b_plane);
+    processed_image_publisher.publish(*processed_ros_img);
     
     // threshold the blue plane to reduce the viable points for Hough
-    cvThreshold(b_plane, b_plane, 230, 255, CV_THRESH_TOZERO);
+    cvThreshold(b_plane, b_plane, BRIGHTNESS_THRESHOLD, 255, CV_THRESH_BINARY);
+    
+    binaryPixelDensityFinder(b_plane, window_height, window_width, densities);
+	
+	DensityFilter(densities, min_density, window_height, window_width, b_plane->widthStep, max_windows);
     
     // perform probabalistic Hough transform:
     // 4th arg: rho resolution
     // 5th arg: theta resolution
     // 6th arg: # of colinear points needed for line
     // 7th arg: max pixel spacing allowed between points on a line
-    lines = cvHoughLines2(b_plane, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, 10, 2);
+    lines = cvHoughLines2(b_plane, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, HOUGH1_MIN_POINTS, HOUGH1_MAX_SPACING);
     
     if (lines->total != 0) {
         for (int n=0; n < lines->total; n++) {
@@ -185,25 +280,25 @@ void findLinesInImage(IplImage *img) {
             cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 2, CV_AA, 0);
         }
     }
-#ifdef __SECONDARY_HOUGHLINE
-    cvClearSeq(lines);
-    cvClearMemStorage(storage);
-    lines = cvHoughLines2(img_lines, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, 150, 20);
-    cvZero(img_lines);
+    if (HOUGH2_ENABLED) {
+        cvClearSeq(lines);
+        cvClearMemStorage(storage);
+        lines = cvHoughLines2(img_lines, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/4, 2, HOUGH2_MIN_POINTS, HOUGH2_MAX_SPACING);
+        cvZero(img_lines);
     
-    if (lines->total != 0) {
-        for (int n=0; n < lines->total; n++) {
-            int *line = (int*)cvGetSeqElem(lines, n);
+        if (lines->total != 0) {
+            for (int n=0; n < lines->total; n++) {
+                int *line = (int*)cvGetSeqElem(lines, n);
             
-            pt1.x = line[0];
-            pt1.y = line[1];
-            pt2.x = line[2];
-            pt2.y = line[3];
+                pt1.x = line[0];
+                pt1.y = line[1];
+                pt2.x = line[2];
+                pt2.y = line[3];
             
-            cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 2, CV_AA, 0);
+                cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 4, CV_AA, 0);
+            }
         }
     }
-#endif
     
 #ifdef __TX_DEBUG_IMAGE
 {
@@ -255,19 +350,12 @@ void findLinesInImage(IplImage *img) {
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
     g_points.clear();
-    sequence_count++;
-    if (sequence_count == 100) {
-        ros::param::get("/line_processing/thresh_subtract", thresh_subtract);
-        ros::param::get("/line_processing/percent_coverage", percent_coverage);
-        sequence_count = 0;
-    }
     
     // Convert the image received into an IPLimage
     IplImage *captured_img = bridge_.imgMsgToCv(ros_img);
     
-#ifdef __STOCK_IMAGE
-    captured_img = cvLoadImage("/home/william/stock_img1.jpg", CV_LOAD_IMAGE_UNCHANGED);
-#endif
+    if (STOCK_IMAGE_ENABLED)
+        captured_img = cvLoadImage(STOCK_IMAGE_PATH, CV_LOAD_IMAGE_UNCHANGED);
     
     cvWarpPerspective(captured_img, captured_img_bird, birdeye_mat,
                       CV_INTER_LINEAR | CV_WARP_INVERSE_MAP | CV_WARP_FILL_OUTLIERS); 
@@ -277,24 +365,23 @@ void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
 #ifdef __TX_PROCESSED_IMAGE
     // Convert processed image into ros_img_msg
 //////////////////////// > We need to make sure that these variables are recycled properly
-    sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(captured_img_bird);
-    // sensor_msgs::Image msg(*processed_ros_img);
+    // sensor_msgs::Image::Ptr processed_ros_img = sensor_msgs::CvBridge::cvToImgMsg(captured_img_bird);
 //////////////////////// <
     // Publish image to topic /processed_image
-    processed_image_publisher.publish(*processed_ros_img);
+    // processed_image_publisher.publish(*processed_ros_img);
 #endif
 }
 
-void dynamicReconfigureCallback(line_processing::LineProcessingConfig &config, uint32_t level) {
-    STOCK_IMAGE_ENABLE      = config.stock_image_enabled;
-    STOCK_IMAGE_PATH        = config.stock_image;
-    BRIGHTNESS_THRESHOLD    = config.brightness_threshold;
+void dynamicReconfigureCallback(line_processing::line_processingConfig &config, uint32_t level) {
+    STOCK_IMAGE_ENABLED      = config.stock_image_enabled;
+    STOCK_IMAGE_PATH        = config.stock_image.c_str();
+    BRIGHTNESS_THRESHOLD    = (int)config.brightness_threshold;
     HISTOGRAM_ENABLED       = config.histogram_enabled;
-    HOUGH1_MIN_POINTS       = config.hough1_min_points;
-    HOUGH1_MAX_SPACING      = config.hough1_max_spacing;
+    HOUGH1_MIN_POINTS       = (int)config.hough1_min_points;
+    HOUGH1_MAX_SPACING      = (int)config.hough1_max_spacing;
     HOUGH2_ENABLED          = config.hough2_enabled;
-    HOUGH2_MIN_POINTS       = config.hough2_min_points;
-    HOUGH2_MAX_SPACING      = config.hough2_max_spacing;
+    HOUGH2_MIN_POINTS       = (int)config.hough2_min_points;
+    HOUGH2_MAX_SPACING      = (int)config.hough2_max_spacing;
 }
 
 int main(int argc, char** argv) {
@@ -304,11 +391,7 @@ int main(int argc, char** argv) {
     
     // Setup enable/disable Service
     ros::ServiceServer service = n->advertiseService("lineProcessingControl", lineProcessingControl);
-    
-    ros::param::get("/line_processing/thresh_subtract", thresh_subtract);
-    ros::param::get("/line_processing/percent_coverage", percent_coverage);
-    sequence_count = 0;
-    
+        
     // load white grass image template
     char dir[FILENAME_MAX]; 
     std::string path;
@@ -326,7 +409,7 @@ int main(int argc, char** argv) {
     // Register the node handle with the image transport
     image_transport::ImageTransport it(*n);
     // Set the image buffer to 1 so that we process the latest image always
-    image_transport::Subscriber sub = it.subscribe("/usb_cam/image_raw", 1, imageReceived);
+    image_transport::Subscriber sub = it.subscribe("/image_raw", 1, imageReceived);
     point_cloud_publisher = n->advertise<sensor_msgs::PointCloud>("image_point_cloud", 5);
 #ifdef __TX_PROCESSED_IMAGE
     processed_image_publisher = n->advertise<sensor_msgs::Image>("processed_image", 1);
@@ -352,12 +435,11 @@ int main(int argc, char** argv) {
     // create memory storage for lines returned by Hough
     storage = cvCreateMemStorage(0);
     
-    sequence_count = 0;
     enabled = true;
     
     // Initialize dynamic defaults
-    dynamic_reconfigure::Server<line_processing::LineProcessingConfig> srv;
-    dynamic_reconfigure::Server<line_processing::LineProcessingConfig>::CallbackType f = boost::bind(&dynamicReconfigureCallback, _1, _2);
+    dynamic_reconfigure::Server<line_processing::line_processingConfig> srv;
+    dynamic_reconfigure::Server<line_processing::line_processingConfig>::CallbackType f = boost::bind(&dynamicReconfigureCallback, _1, _2);
     srv.setCallback(f);
     
     // Run until killed
