@@ -53,6 +53,8 @@ uint8_t enabled;
 sensor_msgs::PointCloud::_points_type g_points;
 boost::mutex write_mux;
 
+ros::Time time_of_image;
+
 // These are Dynamic Configurations
 bool STOCK_IMAGE_ENABLED;
 const char *STOCK_IMAGE_PATH;
@@ -266,39 +268,39 @@ void findLinesInImage(IplImage *img) {
     // 5th arg: theta resolution
     // 6th arg: # of colinear points needed for line
     // 7th arg: max pixel spacing allowed between points on a line
-    lines = cvHoughLines2(b_plane, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, HOUGH1_MIN_POINTS, HOUGH1_MAX_SPACING);
-    
-    if (lines->total != 0) {
-        for (int n=0; n < lines->total; n++) {
-            int *line = (int*)cvGetSeqElem(lines, n);
-            
-            pt1.x = line[0];
-            pt1.y = line[1];
-            pt2.x = line[2];
-            pt2.y = line[3];
-            
-            cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 2, CV_AA, 0);
-        }
-    }
-    if (HOUGH2_ENABLED) {
-        cvClearSeq(lines);
-        cvClearMemStorage(storage);
-        lines = cvHoughLines2(img_lines, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/4, 2, HOUGH2_MIN_POINTS, HOUGH2_MAX_SPACING);
-        cvZero(img_lines);
-    
-        if (lines->total != 0) {
-            for (int n=0; n < lines->total; n++) {
-                int *line = (int*)cvGetSeqElem(lines, n);
-            
-                pt1.x = line[0];
-                pt1.y = line[1];
-                pt2.x = line[2];
-                pt2.y = line[3];
-            
-                cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 4, CV_AA, 0);
-            }
-        }
-    }
+    // lines = cvHoughLines2(b_plane, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/2, 2, HOUGH1_MIN_POINTS, HOUGH1_MAX_SPACING);
+    // 
+    // if (lines->total != 0) {
+    //     for (int n=0; n < lines->total; n++) {
+    //         int *line = (int*)cvGetSeqElem(lines, n);
+    //         
+    //         pt1.x = line[0];
+    //         pt1.y = line[1];
+    //         pt2.x = line[2];
+    //         pt2.y = line[3];
+    //         
+    //         cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 2, CV_AA, 0);
+    //     }
+    // }
+    // if (HOUGH2_ENABLED) {
+    //     cvClearSeq(lines);
+    //     cvClearMemStorage(storage);
+    //     lines = cvHoughLines2(img_lines, storage, CV_HOUGH_PROBABILISTIC, 2, CV_PI/4, 2, HOUGH2_MIN_POINTS, HOUGH2_MAX_SPACING);
+    //     cvZero(img_lines);
+    // 
+    //     if (lines->total != 0) {
+    //         for (int n=0; n < lines->total; n++) {
+    //             int *line = (int*)cvGetSeqElem(lines, n);
+    //         
+    //             pt1.x = line[0];
+    //             pt1.y = line[1];
+    //             pt2.x = line[2];
+    //             pt2.y = line[3];
+    //         
+    //             cvLine(img_lines, pt1, pt2, cvScalar(255, 0, 0, 0), 4, CV_AA, 0);
+    //         }
+    //     }
+    // }
     
 #ifdef __TX_DEBUG_IMAGE
 {
@@ -314,16 +316,19 @@ void findLinesInImage(IplImage *img) {
 }
 #endif
     
-    ptr = (uchar*)img_lines->imageData;
+    // img_lines = b_plane;
     
-    max = img_lines->widthStep * img_lines->height;
+    ptr = (uchar*)b_plane->imageData;
+    
+    // max = img_lines->widthStep * img_lines->height;
     
     sensor_msgs::PointCloud point_cloud;
     
     point_cloud.header.frame_id = "camera_frame";
-    point_cloud.header.stamp = ros::Time::now();
+    point_cloud.header.stamp = time_of_image;
    
-    if (lines->total != 0) {
+    // if (lines->total != 0) {
+    if (1) {
         int one_fifth = 480 / 5;
         boost::thread calc1(make_point_cloud(ptr, 0, one_fifth - 1));
         boost::thread calc2(make_point_cloud(ptr, (one_fifth * 1), (one_fifth * 2) - 1));
@@ -343,12 +348,13 @@ void findLinesInImage(IplImage *img) {
     
     point_cloud_publisher.publish(point_cloud);
     
-    cvZero(img_lines);
-    cvClearSeq(lines);
-    cvClearMemStorage(storage);
+    // cvZero(img_lines);
+    // cvClearSeq(lines);
+    // cvClearMemStorage(storage);
 };
 
 void imageReceived(const sensor_msgs::ImageConstPtr& ros_img) {
+    time_of_image = ros_img->header.stamp;
     g_points.clear();
     
     // Convert the image received into an IPLimage
@@ -409,7 +415,7 @@ int main(int argc, char** argv) {
     // Register the node handle with the image transport
     image_transport::ImageTransport it(*n);
     // Set the image buffer to 1 so that we process the latest image always
-    image_transport::Subscriber sub = it.subscribe("/image_raw", 1, imageReceived);
+    image_transport::Subscriber sub = it.subscribe("/usb_cam/image_raw", 1, imageReceived);
     point_cloud_publisher = n->advertise<sensor_msgs::PointCloud>("image_point_cloud", 5);
 #ifdef __TX_PROCESSED_IMAGE
     processed_image_publisher = n->advertise<sensor_msgs::Image>("processed_image", 1);
