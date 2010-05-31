@@ -15,11 +15,12 @@
   <depend package="std_msgs"/>
   <depend package="image_transport"/>
   <depend package="rospy"/>
-  <depend package="usb_cam"/>
+  <depend package="roslib"/>
+  <!-- <depend package="usb_cam"/> -->
   <depend package="dynamic_reconfigure" />
-  <!-- <depend package="gencam_cu" /> -->
+  <depend package="driver_base"/>
+  <depend package="gencam_cu" />
   <export>
-    <!-- <cpp cflags="-fprofile-arcs -ftest-coverage" /> -->
   </export>
 </package>
 
