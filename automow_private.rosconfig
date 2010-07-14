@@ -1,0 +1,3 @@
+- git: 
+    uri: git@github.com:wjwwood/au-automow.git
+    local-name: au-automow
