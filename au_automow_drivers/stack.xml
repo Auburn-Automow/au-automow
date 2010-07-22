@@ -1,0 +1,14 @@
+<stack>
+  <description brief="au_automow_drivers">
+      
+      Contains packages that implement drivers and interfaces to hardware elements used on Auburn University's Autonomous Lawnmower.
+      The drivers include: The Roboteq AX2550 motor controller with encoder module, The Magellan DG14 GPS unit, and the SparkFun Atomic IMU.
+      
+  </description>
+  <author>Maintained by William Woodall</author>
+  <license>BSD</license>  
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/au_automow_drivers</url>
+  <depend stack="ros" />
+
+</stack>
