@@ -25,14 +25,14 @@ def move(speed, direction):
         speed /= 2
         direction /= 6
         move = rospy.ServiceProxy('move', Move)
-        resp1 = move(speed, -1*direction)
+        resp1 = move(speed, direction)
         return resp1.result
     except rospy.ServiceException, e:
         print "Service call failed: %s"%e
 
 def joystickCallback(data):
     """Called everytime the joystick updates"""
-    move(data.axes[1], data.axes[0])
+    move(data.axes[0], data.axes[1])
 
 def joystickListener():
     """Listens for Joystick signals"""

@@ -303,10 +303,11 @@ class AX2550(object):
             else:
                 encoder_2 = 0
             # Publish the encoder data
-            header = roslib.msg._Header.Header()
-            header.stamp = rospy.Time.now()
-            header.frame_id = "0"
-            message = Encoder(header=header, left=encoder_1, right=encoder_2)
+            #header = roslib.msg._Header.Header()
+            message = Encoder(left=encoder_1, right=encoder_2)
+            message.header.stamp = rospy.Time.now()
+            message.header.frame_id = "0"
+            
             try:
                 self.encoders_pub.publish(message)
             except:
@@ -341,12 +342,14 @@ class AX2550(object):
         """
         #Validate the parameters
         if speed < -1.0 or speed > 1.0:
-            error("Speed given to the move() function must be between -1.0 and 1.0 inclusively.")
+            logError(sys.exc_info(), rospy.logerr, "Speed given to the move() function must be between -1.0 and 1.0 inclusively.")
             return
         if direction < -1.0 or direction > 1.0:
-            error("Direction given to the move() function must be between -1.0 and 1.0 inclusively.")
+            logError(sys.exc_info(), rospy.logerr, "Direction given to the move() function must be between -1.0 and 1.0 inclusively.")
             return
         #First calculate the speed of each motor then send the commands
+        #self.setSpeeds2(speed, direction)
+        #return
         #Account for speed
         left_speed = speed
         right_speed = speed
@@ -364,6 +367,48 @@ class AX2550(object):
             right_speed = 1.0
         #Send the commands
         self.setSpeeds(left=left_speed, right=right_speed)
+
+    def setSpeeds2(self, left=None, right=None):
+        """Sets the speed of both motors"""
+        # Lock the speed lock
+        self.speed_lock.acquire()
+        # Resend the current motor speeds
+        if left != None:
+            self.left_speed = left
+        if right != None:
+            self.right_speed = right
+        self.__setSpeed2(self.left_speed, self.right_speed)
+        # Release the speed lock
+        self.speed_lock.release()
+    
+    def __setSpeed2(self, left, right):
+        """Actually sends the appriate message to the motor"""
+        speed = right
+        direction = left
+        # Form the commands
+        #Left command
+        speed_command = "!"
+        if speed < 0:
+            speed_command += "A"
+        else:
+            speed_command += "a"
+        speed = int(abs(left)*MOTOR_RANGE)
+        speed_command += "%02X" % speed
+        #Right command
+        direction_command = "!"
+        if direction < 0:
+            direction_command += "B"
+        else:
+            direction_command += "b"
+        direction = int(abs(right)*MOTOR_RANGE)
+        direction_command += "%02X" % direction
+        # Lock the serial lock
+        self.serial_lock.acquire()
+        # Send the commands
+        self.serial.write(speed_command+'\r')
+        self.serial.write(direction_command+'\r')
+        # Release the serial lock
+        self.serial_lock.release()
     
     def setSpeeds(self, left=None, right=None):
         """Sets the speed of both motors"""
@@ -384,17 +429,17 @@ class AX2550(object):
         #Left command
         left_command = "!"
         if left < 0:
-            left_command += "A"
-        else:
             left_command += "a"
+        else:
+            left_command += "A"
         left = int(abs(left)*MOTOR_RANGE)
         left_command += "%02X" % left
         #Right command
         right_command = "!"
         if right < 0:
-            right_command += "B"
-        else:
             right_command += "b"
+        else:
+            right_command += "B"
         right = int(abs(right)*MOTOR_RANGE)
         right_command += "%02X" % right
         # Lock the serial lock
