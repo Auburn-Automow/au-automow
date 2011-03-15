@@ -1,0 +1,18 @@
+<package>
+  <description brief="osc_monitor">
+
+     osc_monitor
+
+  </description>
+  <author>Michael Carroll</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/osc_monitor</url>
+  <depend package="rospy" />
+
+  <rosdep name="python-liblo" />
+  <rosdep name="python-avahi" />
+  <rosdep name="python-dbus" />
+</package>
+
+
