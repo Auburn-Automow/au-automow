@@ -1,6 +1,3 @@
-[submodule "avr_bridge"]
-	path = avr_bridge
-	url = https://github.com/rutgers/avr_bridge
 [submodule "au_automow_drivers/avr_bridge"]
 	path = au_automow_drivers/avr_bridge
-	url = https://github.com/rutgers/avr_bridge
+	url = git@github.com:mjcarroll/avr_bridge.git
