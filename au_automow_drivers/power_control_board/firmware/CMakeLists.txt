@@ -7,7 +7,11 @@ set(ARDUINO_CORE_DIR  arduino)
 #Include the arduino board specific cmake file
 include(${PROJECT_SOURCE_DIR}/cmake_scripts/arduino_diecimila.cmake)
 include_directories(${PROJECT_SOURCE_DIR})
+include_directories(./libraries)
 
+file(GLOB ARDUINO_LIB
+    "libraries/*.cpp"
+)
 
 file(GLOB AVR_ROS_SRC
     "avr_ros/*.cpp"
@@ -18,6 +22,7 @@ file(GLOB AVR_ROS_SRC
 set(PROJECT_SRC
     main.cpp
     ${AVR_ROS_SRC}
+    ${ARDUINO_LIB}
     ${ARDUINO_SOURCE_FILES}
 )
 

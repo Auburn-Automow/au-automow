@@ -3,10 +3,17 @@
 #include "avr_ros/ros.h"
 #include "avr_ros/CutterControl.h"
 #include "avr_ros/PowerControl.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 ros::Publisher pcb_node;
 avr_bridge::PowerControl pcb_msg;
 avr_bridge::CutterControl cc_msg;
+
+OneWire oneWireTop(9);
+OneWire oneWireBot(10);
+DallasTemperature temperatureTop(&oneWireTop);
+DallasTemperature temperatureBot(&oneWireBot);
 
 namespace ros {
     int fputc(char c, FILE *f) {
@@ -36,6 +43,9 @@ void setup()
 {
     Serial.begin(57600);
     pinMode(13,OUTPUT);
+   
+    temperatureTop.begin();
+    temperatureBot.begin();
 
     pcb_node = node.advertise("PowerControl");
     node.subscribe("CutterControl",cuttercallback,&cc_msg);

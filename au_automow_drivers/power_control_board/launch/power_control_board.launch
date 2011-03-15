@@ -1,0 +1,3 @@
+<launch>
+    <node name="power_control_board" pkg="avr_bridge" type="bridge_node.py" args="$(find power_control_board)/config/automow.yaml" output="screen"/>
+</launch>
