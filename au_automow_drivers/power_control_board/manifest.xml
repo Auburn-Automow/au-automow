@@ -1,0 +1,15 @@
+<package>
+  <description brief="power_control_board">
+
+     power_control_board
+
+  </description>
+  <author>Michael Carroll</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/power_control_board</url>
+  <depend package="rospy"/>
+  <depend package="avr_bridge"/>
+</package>
+
+

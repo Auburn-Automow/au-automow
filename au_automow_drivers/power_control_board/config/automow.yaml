@@ -1,0 +1,8 @@
+port: /dev/powercontrol
+name : PowerControlBoard 
+publish:
+ PowerControl: #topic name
+  type: avr_bridge/PowerControl 
+subscribe:
+ CutterControl:
+  type: avr_bridge/CutterControl
