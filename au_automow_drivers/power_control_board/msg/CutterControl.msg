@@ -1,0 +1,2 @@
+bool    LeftControl
+bool    RightControl
