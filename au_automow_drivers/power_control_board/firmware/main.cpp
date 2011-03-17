@@ -48,14 +48,9 @@ char batteryState = 0;
 char stateOfCharge;
 
 bool ledState = LOW;
-
+int voltaverage;
 bool cutterLeftState;
 bool cutterRightState;
-
-#define windowSize 6
-int ADCVolts[windowSize] = {0,0,0,0,0,0};
-int ADCAmps[windowSize] = {0,0,0,0,0,0};
-int i = 0;
 
 namespace ros {
     int fputc(char c, FILE *f) {
@@ -93,9 +88,31 @@ void updateBatteryDisplay(void)
             digitalWrite(pin_ledHigh,ledState);
             break;
         case BS_DISCHARGING:
-            
+            if(pcb_msg.StateofCharge > 80) {
+                digitalWrite(pin_ledHigh,HIGH);
+                digitalWrite(pin_ledMid, LOW);
+                digitalWrite(pin_ledLow, LOW);
+            } else if (pcb_msg.StateofCharge > 65) {
+                digitalWrite(pin_ledHigh,HIGH);
+                digitalWrite(pin_ledMid,HIGH);
+                digitalWrite(pin_ledLow,LOW);
+            } else if (pcb_msg.StateofCharge > 50) {
+                digitalWrite(pin_ledHigh,LOW);
+                digitalWrite(pin_ledMid,HIGH);
+                digitalWrite(pin_ledLow,LOW);
+            } else if (pcb_msg.StateofCharge > 35) {
+                digitalWrite(pin_ledHigh,LOW);
+                digitalWrite(pin_ledMid,HIGH);
+                digitalWrite(pin_ledLow,HIGH);
+            } else {
+                digitalWrite(pin_ledHigh,LOW);
+                digitalWrite(pin_ledMid,LOW);
+                digitalWrite(pin_ledLow,HIGH);
+            }
             break;
         case BS_CRITICAL:
+            digitalWrite(pin_ledMid,LOW);
+            digitalWrite(pin_ledHigh,LOW);
             digitalWrite(pin_ledLow,ledState);
             break;
     }
@@ -128,16 +145,16 @@ void setup()
         pcb_msg.Temperature1 = 0;
     } else {
         temperatureTop.setResolution(topAddress,9);
-	temperatureTop.setWaitForConversion(false);
-	temperatureTop.requestTemperatures();
+        temperatureTop.setWaitForConversion(false);
+        temperatureTop.requestTemperatures();
     }
     if(!temperatureBot.getAddress(botAddress,0))
     {
         pcb_msg.Temperature2 = 0;
     } else {
         temperatureBot.setResolution(botAddress,9);
-	temperatureBot.setWaitForConversion(false);
-	temperatureBot.requestTemperatures();
+        temperatureBot.setWaitForConversion(false);
+        temperatureBot.requestTemperatures();
     }
     pcb_status = node.advertise("PowerControlStatus");
     pcb_node = node.advertise("PowerControl");
@@ -153,47 +170,56 @@ void loop()
         node.spin(c);
     }
     
-    ADCVolts[i] = analogRead(pin_voltage);
-    ADCAmps[i] = analogRead(pin_current);
-    i++;
-    if(i == windowSize) i = 0;
-    pcb_msg.LeftCutterStatus = digitalRead(pin_leftCutterCheck);
-    pcb_msg.RightCutterStatus = digitalRead(pin_rightCutterCheck);
+    float ADCVolts = analogRead(pin_voltage);
+    float ADCAmps = 504-analogRead(pin_current);
+    
+    int volts = ((ADCVolts/33.57)-23.0)*50.0;
+    voltaverage = (8*voltaverage + 2*volts)/10;
+    if(volts < 0)
+    {
+        batteryState = BS_DISCONNECT;
+        pcb_msg.StateofCharge = 0;
+    } else if(volts > 100) {
+        batteryState = BS_CHARGING;
+        pcb_msg.StateofCharge = 100;
+    } else if(volts < 20){
+        batteryState = BS_CRITICAL;
+        pcb_msg.StateofCharge = volts;
+    } else {
+        batteryState = BS_DISCHARGING;
+        pcb_msg.StateofCharge = volts;
+    }
+    
+    pcb_msg.LeftCutterStatus = (digitalRead(pin_leftCutterCheck) ? FALSE : TRUE);
+    pcb_msg.RightCutterStatus = (digitalRead(pin_rightCutterCheck) ? FALSE : TRUE);
 
     if (ledMetro.check() == 1)
     {
-        if(!pcb_msg.LeftCutterStatus && cutterLeftState)
+        if(cutterLeftState && !pcb_msg.LeftCutterStatus)
         {
+            pcb_msg.LeftCutterStatus = FALSE;
+            cutterLeftState= LOW;
             digitalWrite(pin_leftCutterControl,LOW);
-            cutterLeftState = LOW;
-            pcb_msg.LeftCutterStatus = LOW;
+            digitalWrite(13,HIGH);
         }
-        if(!pcb_msg.RightCutterStatus && cutterRightState)
+        if(cutterRightState&& !pcb_msg.RightCutterStatus)
         {
+            pcb_msg.RightCutterStatus = FALSE;
+            cutterRightState = LOW;
             digitalWrite(pin_rightCutterControl,LOW);
-            cutterRightState= LOW;
-            pcb_msg.RightCutterStatus = LOW;
-
+            digitalWrite(13,LOW);
         }
         updateBatteryDisplay();
     }
 
     if (msgMetro.check() == 1)
     {
-	pcb_msg.Voltage = 0;
-        pcb_msg.Current = 0;
-	for(char j = 0; j <= windowSize; j++)
-	{
-	    pcb_msg.Voltage += ADCVolts[j];
-            pcb_msg.Current += 504-ADCAmps[j];
-	}
-	pcb_msg.Voltage = pcb_msg.Voltage/(windowSize*33.57);
-	pcb_msg.Current = pcb_msg.Current/(windowSize*3.15);
-	pcb_msg.StateofCharge = map(pcb_msg.Voltage,22.5,27.0,0,100);  
-	pcb_msg.Temperature1 = temperatureTop.getTempCByIndex(0);
-	pcb_msg.Temperature2 = temperatureBot.getTempCByIndex(0);	
-	temperatureTop.requestTemperatures();
-	temperatureBot.requestTemperatures();
+        pcb_msg.Voltage = ADCVolts/33.57;
+        pcb_msg.Current = ADCAmps/3.15;
+        pcb_msg.Temperature1 = temperatureTop.getTempCByIndex(0);
+        pcb_msg.Temperature2 = temperatureBot.getTempCByIndex(0);	
+        temperatureTop.requestTemperatures();
+        temperatureBot.requestTemperatures();
         node.publish(pcb_node,&pcb_msg);
     }
 }
