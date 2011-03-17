@@ -27,7 +27,7 @@ avr_bridge::CutterControl cc_msg;
 #define pin_voltage                 0
 #define pin_current                 1
 
-
+// One-wire required setup.
 OneWire oneWireTop(pin_temperatureTop);
 OneWire oneWireBot(pin_temperatureBot);
 DallasTemperature temperatureTop(&oneWireTop);
@@ -35,6 +35,7 @@ DallasTemperature temperatureBot(&oneWireBot);
 DeviceAddress topAddress;
 DeviceAddress botAddress;
 
+// Metronomes for the LED blink and ROS messages
 Metro ledMetro = Metro(500);
 Metro msgMetro = Metro(250);
 
@@ -43,10 +44,18 @@ char batteryState = 0;
 #define BS_CHARGING 1
 #define BS_DISCHARGING 2
 #define BS_CRITICAL 3
+
 char stateOfCharge;
+
 bool ledState = LOW;
+
 bool cutterLeftState;
 bool cutterRightState;
+
+#define windowSize 6
+int ADCVolts[windowSize] = {0,0,0,0,0,0};
+int ADCAmps[windowSize] = {0,0,0,0,0,0};
+int i = 0;
 
 namespace ros {
     int fputc(char c, FILE *f) {
@@ -119,12 +128,16 @@ void setup()
         pcb_msg.Temperature1 = 0;
     } else {
         temperatureTop.setResolution(topAddress,9);
+	temperatureTop.setWaitForConversion(false);
+	temperatureTop.requestTemperatures();
     }
     if(!temperatureBot.getAddress(botAddress,0))
     {
         pcb_msg.Temperature2 = 0;
     } else {
         temperatureBot.setResolution(botAddress,9);
+	temperatureBot.setWaitForConversion(false);
+	temperatureBot.requestTemperatures();
     }
     pcb_status = node.advertise("PowerControlStatus");
     pcb_node = node.advertise("PowerControl");
@@ -139,14 +152,11 @@ void loop()
             break;
         node.spin(c);
     }
-    ADC_Volts = analogRead(pin_voltage);
-    ADC_Amps = analogRead(pin_current);
     
-    pcb_msg.Voltage = ADC_Volts/33.57;
-    pcb_msg.Current = (ADC_Amps-504)/3.15;
-    pcb_msg.StateofCharge = 100;
-    pcb_msg.Temperature1 = temperatureTop.getTempC(topAddress);
-    pcb_msg.Temperature2 = temperatureBot.getTempC(botAddress);
+    ADCVolts[i] = analogRead(pin_voltage);
+    ADCAmps[i] = analogRead(pin_current);
+    i++;
+    if(i == windowSize) i = 0;
     pcb_msg.LeftCutterStatus = digitalRead(pin_leftCutterCheck);
     pcb_msg.RightCutterStatus = digitalRead(pin_rightCutterCheck);
 
@@ -170,6 +180,20 @@ void loop()
 
     if (msgMetro.check() == 1)
     {
+	pcb_msg.Voltage = 0;
+        pcb_msg.Current = 0;
+	for(char j = 0; j <= windowSize; j++)
+	{
+	    pcb_msg.Voltage += ADCVolts[j];
+            pcb_msg.Current += 504-ADCAmps[j];
+	}
+	pcb_msg.Voltage = pcb_msg.Voltage/(windowSize*33.57);
+	pcb_msg.Current = pcb_msg.Current/(windowSize*3.15);
+	pcb_msg.StateofCharge = map(pcb_msg.Voltage,22.5,27.0,0,100);  
+	pcb_msg.Temperature1 = temperatureTop.getTempCByIndex(0);
+	pcb_msg.Temperature2 = temperatureBot.getTempCByIndex(0);	
+	temperatureTop.requestTemperatures();
+	temperatureBot.requestTemperatures();
         node.publish(pcb_node,&pcb_msg);
     }
 }
