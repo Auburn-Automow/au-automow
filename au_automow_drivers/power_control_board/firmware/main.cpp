@@ -3,7 +3,6 @@
 #include "avr_ros/ros.h"
 #include "avr_ros/CutterControl.h"
 #include "avr_ros/PowerControl.h"
-#include "avr_ros/String.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Metro.h>
@@ -45,7 +44,9 @@ char batteryState = 0;
 #define BS_DISCHARGING 2
 #define BS_CRITICAL 3
 char stateOfCharge;
-byte ledState = LOW;
+bool ledState = LOW;
+bool cutterLeftState;
+bool cutterRightState;
 
 namespace ros {
     int fputc(char c, FILE *f) {
@@ -58,6 +59,8 @@ void cuttercallback(ros::Msg const *msg)
 {
     digitalWrite(pin_leftCutterControl,cc_msg.LeftControl);
     digitalWrite(pin_rightCutterControl,cc_msg.RightControl);
+    cutterLeftState = HIGH;
+    cutterRightState = HIGH;
 }
 
 void updateBatteryDisplay(void)
@@ -108,14 +111,16 @@ void setup()
 
     temperatureTop.begin();
     temperatureBot.begin();
-
-    if(!temperatureTop.getAddress(topAddress))
+    
+    // Make sure we have temperature sensors, if not, set to something
+    // unreasonable. This would be 0 in Alabama.
+    if(!temperatureTop.getAddress(topAddress,0))
     {
         pcb_msg.Temperature1 = 0;
     } else {
         temperatureTop.setResolution(topAddress,9);
     }
-    if(!temperatureBot.getAddress(botAddress))
+    if(!temperatureBot.getAddress(botAddress,0))
     {
         pcb_msg.Temperature2 = 0;
     } else {
@@ -137,7 +142,7 @@ void loop()
     ADC_Volts = analogRead(pin_voltage);
     ADC_Amps = analogRead(pin_current);
     
-    pcb_msg.Voltage = ADC_Volts/68.3;
+    pcb_msg.Voltage = ADC_Volts/33.57;
     pcb_msg.Current = (ADC_Amps-504)/3.15;
     pcb_msg.StateofCharge = 100;
     pcb_msg.Temperature1 = temperatureTop.getTempC(topAddress);
@@ -147,6 +152,19 @@ void loop()
 
     if (ledMetro.check() == 1)
     {
+        if(!pcb_msg.LeftCutterStatus && cutterLeftState)
+        {
+            digitalWrite(pin_leftCutterControl,LOW);
+            cutterLeftState = LOW;
+            pcb_msg.LeftCutterStatus = LOW;
+        }
+        if(!pcb_msg.RightCutterStatus && cutterRightState)
+        {
+            digitalWrite(pin_rightCutterControl,LOW);
+            cutterRightState= LOW;
+            pcb_msg.RightCutterStatus = LOW;
+
+        }
         updateBatteryDisplay();
     }
 
