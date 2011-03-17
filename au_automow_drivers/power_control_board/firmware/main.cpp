@@ -3,10 +3,13 @@
 #include "avr_ros/ros.h"
 #include "avr_ros/CutterControl.h"
 #include "avr_ros/PowerControl.h"
+#include "avr_ros/String.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Metro.h>
 
 ros::Publisher pcb_node;
+ros::Publisher pcb_status;
 avr_bridge::PowerControl pcb_msg;
 avr_bridge::CutterControl cc_msg;
 
@@ -30,6 +33,19 @@ OneWire oneWireTop(pin_temperatureTop);
 OneWire oneWireBot(pin_temperatureBot);
 DallasTemperature temperatureTop(&oneWireTop);
 DallasTemperature temperatureBot(&oneWireBot);
+DeviceAddress topAddress;
+DeviceAddress botAddress;
+
+Metro ledMetro = Metro(500);
+Metro msgMetro = Metro(250);
+
+char batteryState = 0;
+#define BS_DISCONNECT 0
+#define BS_CHARGING 1
+#define BS_DISCHARGING 2
+#define BS_CRITICAL 3
+char stateOfCharge;
+byte ledState = LOW;
 
 namespace ros {
     int fputc(char c, FILE *f) {
@@ -40,8 +56,37 @@ namespace ros {
 
 void cuttercallback(ros::Msg const *msg)
 {
-    digitalWrite(13,cc_msg.LeftControl);
+    digitalWrite(pin_leftCutterControl,cc_msg.LeftControl);
     digitalWrite(pin_rightCutterControl,cc_msg.RightControl);
+}
+
+void updateBatteryDisplay(void)
+{
+    if (ledState == LOW)
+    { 
+        ledState = HIGH;
+    } else { 
+        ledState = LOW;
+    }
+    switch(batteryState)
+    {
+        case BS_DISCONNECT:
+            digitalWrite(pin_ledMid,LOW);
+            digitalWrite(pin_ledHigh,LOW);
+            digitalWrite(pin_ledLow,LOW);
+            break;
+        case BS_CHARGING:
+            digitalWrite(pin_ledLow,LOW);
+            digitalWrite(pin_ledMid,LOW);
+            digitalWrite(pin_ledHigh,ledState);
+            break;
+        case BS_DISCHARGING:
+            
+            break;
+        case BS_CRITICAL:
+            digitalWrite(pin_ledLow,ledState);
+            break;
+    }
 }
 
 void setup()
@@ -54,6 +99,9 @@ void setup()
     pinMode(pin_rightCutterCheck,INPUT);
     pinMode(pin_leftCutterControl,OUTPUT);
     pinMode(pin_rightCutterControl,OUTPUT);
+    // Turn off the cutters by default
+    digitalWrite(pin_leftCutterControl,LOW);
+    digitalWrite(pin_rightCutterControl,LOW);
     pinMode(pin_ledHigh,OUTPUT);
     pinMode(pin_ledMid,OUTPUT);
     pinMode(pin_ledLow,OUTPUT);
@@ -61,6 +109,19 @@ void setup()
     temperatureTop.begin();
     temperatureBot.begin();
 
+    if(!temperatureTop.getAddress(topAddress))
+    {
+        pcb_msg.Temperature1 = 0;
+    } else {
+        temperatureTop.setResolution(topAddress,9);
+    }
+    if(!temperatureBot.getAddress(botAddress))
+    {
+        pcb_msg.Temperature2 = 0;
+    } else {
+        temperatureBot.setResolution(botAddress,9);
+    }
+    pcb_status = node.advertise("PowerControlStatus");
     pcb_node = node.advertise("PowerControl");
     node.subscribe("CutterControl",cuttercallback,&cc_msg);
 }
@@ -73,14 +134,24 @@ void loop()
             break;
         node.spin(c);
     }
-    pcb_msg.Voltage = analogRead(pin_voltage);
-    pcb_msg.Current = analogRead(pin_current);
+    ADC_Volts = analogRead(pin_voltage);
+    ADC_Amps = analogRead(pin_current);
+    
+    pcb_msg.Voltage = ADC_Volts/68.3;
+    pcb_msg.Current = (ADC_Amps-504)/3.15;
     pcb_msg.StateofCharge = 100;
-    pcb_msg.Temperature1 = 10;
-    pcb_msg.Temperature2 = 10;
+    pcb_msg.Temperature1 = temperatureTop.getTempC(topAddress);
+    pcb_msg.Temperature2 = temperatureBot.getTempC(botAddress);
     pcb_msg.LeftCutterStatus = digitalRead(pin_leftCutterCheck);
     pcb_msg.RightCutterStatus = digitalRead(pin_rightCutterCheck);
-    node.publish(pcb_node,&pcb_msg);
 
-    delay(100);
+    if (ledMetro.check() == 1)
+    {
+        updateBatteryDisplay();
+    }
+
+    if (msgMetro.check() == 1)
+    {
+        node.publish(pcb_node,&pcb_msg);
+    }
 }
