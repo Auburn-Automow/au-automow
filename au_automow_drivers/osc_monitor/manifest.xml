@@ -9,6 +9,7 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/osc_monitor</url>
   <depend package="rospy" />
+  <depend package="power_control_board" />
 
   <rosdep name="python-liblo" />
   <rosdep name="python-avahi" />
