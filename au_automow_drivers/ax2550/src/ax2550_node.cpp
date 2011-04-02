@@ -12,8 +12,12 @@ void cmd_velCallback(const geometry_msgs::Twist::ConstPtr& msg)
     ax2550->move(msg->linear.x, msg->angular.z);
 }
 
-void errorMsgCallback(std::string &msg) {
+void errorMsgCallback(const std::string &msg) {
     ROS_ERROR(msg.c_str());
+}
+
+void infoMsgCallback(const std::string &msg) {
+    ROS_INFO(msg.c_str());
 }
 
 int main(int argc, char **argv)
@@ -26,6 +30,7 @@ int main(int argc, char **argv)
     
     ax2550 = new AX2550(port);
     ax2550->setErrorMsgCallback(errorMsgCallback);
+    ax2550->setInfoMsgCallback(infoMsgCallback);
     ax2550->connect();
     
     ros::Subscriber sub = n.subscribe("cmd_vel", 1, cmd_velCallback);

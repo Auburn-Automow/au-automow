@@ -1,10 +1,10 @@
 #include "ax2550.h"
 
-inline void defaultInfoMsgCallback(std::string &msg) {
+inline void defaultInfoMsgCallback(const std::string &msg) {
     std::cerr << "AX2550 Info: " << msg << std::endl;
 }
 
-inline void defaultErrorMsgCallback(std::string &msg) {
+inline void defaultErrorMsgCallback(const std::string &msg) {
     std::cerr << "AX2550 Error: " << msg << std::endl;
 }
 
@@ -29,7 +29,7 @@ void AX2550::connect() {
         this->serial_port.setParity(serial::PARITY_EVEN);
         this->serial_port.setStopbits(serial::STOPBITS_ONE);
         this->serial_port.setBytesize(serial::SEVENBITS);
-        this->serial_port.setTimeoutMilliseconds(250);
+        this->serial_port.setTimeoutMilliseconds(2000);
         
         // Open the serial port
         this->serial_port.open();
@@ -43,33 +43,62 @@ void AX2550::connect() {
     this->sync();
 }
 
+inline void printHex(char * data, int length) {
+    for(int i = 0; i < length; ++i) {
+        printf("0x%.2X ", (unsigned)(unsigned char)data[i]);
+    }
+    printf("\n");
+}
+
 void AX2550::sync() {
     if(synced)
         return;
     // Ensure the motor controller is in radio mode by reseting
+    // boost::this_thread::sleep(boost::posix_time::milliseconds(2000));
     this->serial_port.write("%rrrrrr\r");
-    while(this->serial_port.read(1).length() != 0)
-        continue;
+    boost::this_thread::sleep(boost::posix_time::milliseconds(2000));
+    std::string temp;
+    // temp = this->serial_port.read(1);
+    // while(temp.length() != 0) {
+    //     std::cout << temp << std::endl;
+    //     temp = this->serial_port.read(1);
+    // }
     
     // Place the system in Serial mode
     for(int i = 0; i < 10; ++i) {
         this->serial_port.write("\r");
         boost::this_thread::sleep(boost::posix_time::milliseconds(25));
     }
-    int count = 0;
-    while(!this->synced && count != 20) {
-        if(this->serial_port.read(1) == "O") {
-            if(this->serial_port.read(1) == "K")
-                this->synced = true;
-            else
-                count++;
-        } else {
-            count++;
-        }
-    }
+    
+    // temp = this->serial_port.read(8000);
+    // printHex(const_cast<char *>(temp.c_str()), temp.length());
+    // std::cout << temp << std::endl;
+    // throw(SynchonizationFailedException("Man made."));
+    
+    // int count = 0;
+    //     // std::string temp;
+    //     while(!this->synced && count != 200) {
+    //         // std::cout << "> " << this->serial_port.read(1) << std::endl;
+    //         // continue;
+    //         temp = this->serial_port.read(1);
+    //         if(temp == "O") {   
+    //                 temp += this->serial_port.read(1);
+    //             if(temp == "K")
+    //                 this->synced = true;
+    //             else
+    //                 count++;
+    //         } else {
+    //             count++;
+    //         }
+    //     }
+    
+    temp = this->serial_port.read(1000);
+    if(temp.find("OK"))
+        this->synced = true;
     
     if(!this->synced)
         throw(SynchonizationFailedException("Failed to get OK from motor controller."));
+    this->info("Synchronized to AX2550.");
 }
 
 bool AX2550::move(double speed, double direction) {
@@ -85,9 +114,9 @@ bool AX2550::move(double speed, double direction) {
     
     speed_hex = (unsigned char) (fabs(speed) * 127);
     if(speed < 0)
-        sprintf(serial_buffer, "!B%.2X\r", speed_hex);
+        sprintf(serial_buffer, "!a%.2X\r", speed_hex);
     else
-        sprintf(serial_buffer, "!b%.2X\r", speed_hex);
+        sprintf(serial_buffer, "!A%.2X\r", speed_hex);
     this->serial_port.write(serial_buffer, 5);
     boost::this_thread::sleep(boost::posix_time::milliseconds(5));
     
@@ -102,9 +131,9 @@ bool AX2550::move(double speed, double direction) {
     
     direction_hex = (unsigned char) (fabs(direction) * 127);
     if(direction < 0)
-        sprintf(serial_buffer, "!a%.2X\r", direction_hex);
+        sprintf(serial_buffer, "!b%.2X\r", direction_hex);
     else
-        sprintf(serial_buffer, "!A%.2X\r", direction_hex);
+        sprintf(serial_buffer, "!B%.2X\r", direction_hex);
     
     this->serial_port.write(serial_buffer, 5);
     boost::this_thread::sleep(boost::posix_time::milliseconds(5));
@@ -125,10 +154,10 @@ bool AX2550::move(double speed, double direction) {
     return true;
 }
 
-void AX2550::setInfoMsgCallback(void (*f)(std::string &msg)) {
+void AX2550::setInfoMsgCallback(void (*f)(const std::string &msg)) {
     this->info = f;
 }
 
-void AX2550::setErrorMsgCallback(void (*f)(std::string &msg)) {
+void AX2550::setErrorMsgCallback(void (*f)(const std::string &msg)) {
     this->error = f;
 }

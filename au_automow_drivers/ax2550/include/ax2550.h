@@ -22,8 +22,8 @@ public:
     
     bool move(double speed, double direction);
     
-    void setInfoMsgCallback(void (*f)(std::string &msg));
-    void setErrorMsgCallback(void (*f)(std::string &msg));
+    void setInfoMsgCallback(void (*f)(const std::string &msg));
+    void setErrorMsgCallback(void (*f)(const std::string &msg));
 private:
     void sync();
     
@@ -32,8 +32,8 @@ private:
     bool connected;
     bool synced;
     boost::mutex mc_mutex;
-    void (*info)(std::string &msg);
-    void (*error)(std::string &msg);
+    void (*info)(const std::string &msg);
+    void (*error)(const std::string &msg);
 };
 
 class ConnectionFailedException : public std::exception {
