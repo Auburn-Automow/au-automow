@@ -14,11 +14,11 @@ AX2550::AX2550(std::string port) : serial_port() {
     this->synced = false;
     this->info = defaultInfoMsgCallback;
     this->error = defaultErrorMsgCallback;
+    this->timeout = 250;
 }
 
 AX2550::~AX2550() {
-    if(this->serial_port.isOpen())
-        this->serial_port.close();
+    this->disconnect();
 }
 
 void AX2550::connect() {
@@ -29,7 +29,7 @@ void AX2550::connect() {
         this->serial_port.setParity(serial::PARITY_EVEN);
         this->serial_port.setStopbits(serial::STOPBITS_ONE);
         this->serial_port.setBytesize(serial::SEVENBITS);
-        this->serial_port.setTimeoutMilliseconds(2000);
+        this->serial_port.setTimeoutMilliseconds(this->timeout);
         
         // Open the serial port
         this->serial_port.open();
@@ -43,6 +43,14 @@ void AX2550::connect() {
     this->sync();
 }
 
+void AX2550::disconnect() {
+    // Join the encoder thread
+    
+    // Close the serial port
+    if(this->serial_port.isOpen())
+        this->serial_port.close();
+}
+
 inline void printHex(char * data, int length) {
     for(int i = 0; i < length; ++i) {
         printf("0x%.2X ", (unsigned)(unsigned char)data[i]);
@@ -54,43 +62,15 @@ void AX2550::sync() {
     if(synced)
         return;
     // Ensure the motor controller is in radio mode by reseting
-    // boost::this_thread::sleep(boost::posix_time::milliseconds(2000));
     this->serial_port.write("%rrrrrr\r");
-    boost::this_thread::sleep(boost::posix_time::milliseconds(2000));
+    boost::this_thread::sleep(boost::posix_time::milliseconds(1000)); // Allow time to reset
     std::string temp;
-    // temp = this->serial_port.read(1);
-    // while(temp.length() != 0) {
-    //     std::cout << temp << std::endl;
-    //     temp = this->serial_port.read(1);
-    // }
     
     // Place the system in Serial mode
     for(int i = 0; i < 10; ++i) {
         this->serial_port.write("\r");
         boost::this_thread::sleep(boost::posix_time::milliseconds(25));
     }
-    
-    // temp = this->serial_port.read(8000);
-    // printHex(const_cast<char *>(temp.c_str()), temp.length());
-    // std::cout << temp << std::endl;
-    // throw(SynchonizationFailedException("Man made."));
-    
-    // int count = 0;
-    //     // std::string temp;
-    //     while(!this->synced && count != 200) {
-    //         // std::cout << "> " << this->serial_port.read(1) << std::endl;
-    //         // continue;
-    //         temp = this->serial_port.read(1);
-    //         if(temp == "O") {   
-    //                 temp += this->serial_port.read(1);
-    //             if(temp == "K")
-    //                 this->synced = true;
-    //             else
-    //                 count++;
-    //         } else {
-    //             count++;
-    //         }
-    //     }
     
     temp = this->serial_port.read(1000);
     if(temp.find("OK"))
@@ -105,8 +85,24 @@ bool AX2550::move(double speed, double direction) {
     if(!this->connected)
         throw(MovedFailedException("Must be connected to move."));
     
+    // Bounds check speed and direction
+    if( (fabs(speed) > 1) || (fabs(direction) > 1) ) {
+        std::stringstream ss;
+        ss << "Error sending move command, speed " << speed << " or direction " << direction << " out of bounds.";
+        this->error(ss.str());
+        return false;
+    }
+    
+    bool result = true;
+    
     // Get the lock for reading/writing to the mc
     boost::mutex::scoped_lock lock(this->mc_mutex);
+    
+    // Clear out any watchdogs with a poor man's flush
+    this->serial_port.setTimeoutMilliseconds(1);
+    while(this->serial_port.read(1000).length() != 0)
+        continue;
+    this->serial_port.setTimeoutMilliseconds(this->timeout);
     
     char *serial_buffer = new char[5];
     
@@ -118,13 +114,18 @@ bool AX2550::move(double speed, double direction) {
     else
         sprintf(serial_buffer, "!A%.2X\r", speed_hex);
     this->serial_port.write(serial_buffer, 5);
-    boost::this_thread::sleep(boost::posix_time::milliseconds(5));
     
     // Read the echoed message
-    this->serial_port.read(5);
+    if(this->serial_port.read(5) != std::string(serial_buffer)) {
+        this->error("Error sending move command, speed was not properly echoed.");
+        result = false;
+    }
     
     // Read the command result (+ or -)
-    this->serial_port.read(1);
+    if(this->serial_port.read(2) != "+\r") {
+        this->error("Error sending move command, NAK received on speed.");
+        result = false;
+    }
     
     delete[] serial_buffer;
     serial_buffer = new char[5];
@@ -136,22 +137,66 @@ bool AX2550::move(double speed, double direction) {
         sprintf(serial_buffer, "!B%.2X\r", direction_hex);
     
     this->serial_port.write(serial_buffer, 5);
-    boost::this_thread::sleep(boost::posix_time::milliseconds(5));
     
     // Read the echoed message
-    this->serial_port.read(serial_buffer, 5);
+    if(this->serial_port.read(5) != std::string(serial_buffer)) {
+        this->error("Error sending move command, direction was not properly echoed.");
+        result = false;
+    }
     
     // Read the command result (+ or -)
-    this->serial_port.read(serial_buffer, 1);
+    if(this->serial_port.read(2) != "+\r") {
+        this->error("Error sending move command, NAK received on direction.");
+        result = false;
+    }
     
-    // Check for successfull command execution
-    // if(char(*serial_buffer) != '+') {
-    //     std::cerr << "Bad command detected (ax2550 returned '-')." << serial_buffer << std::endl;
-    // }
+    return result;
+}
+
+AX2550_RPM AX2550::readRPM() {
+    if(!this->connected)
+        throw(QueryFailedException("Must be connected to query RPMs."));
     
-    boost::this_thread::sleep(boost::posix_time::milliseconds(5));
+    // Get the lock for reading/writing to the mc
+    boost::mutex::scoped_lock lock(this->mc_mutex);
     
-    return true;
+    // Clear out any watchdogs with a poor man's flush
+    this->serial_port.setTimeoutMilliseconds(1);
+    while(this->serial_port.read(1000).length() != 0)
+        continue;
+    this->serial_port.setTimeoutMilliseconds(this->timeout);
+    
+    // Send the query
+    if(this->serial_port.write("?z\r") != 3) {
+        throw(QueryFailedException("Error reading RPMs, failed to write to the motor controller."));
+    }
+    
+    // Read the echo
+    if(this->serial_port.read(3) != "?z\r") {
+        throw(QueryFailedException("Error reading RPMs, failed to recieve the echo of the query."));
+    }
+    
+    // Read the result
+    std::string temp = this->serial_port.read(3);
+    if(temp.length() != 3) {
+        throw(QueryFailedException("Error reading RPMs, failed to recieve the response of the query."));
+    }
+    
+    // Extract the data
+    int rpm1 = 0;
+    sscanf(temp.c_str(), "%X\r", &rpm1);
+    
+    // Read the second result
+    temp = this->serial_port.read(3);
+    if(temp.length() != 3) {
+        throw(QueryFailedException("Error reading RPMs, failed to recieve the response of the query."));
+    }
+    
+    // Extract the data
+    int rpm2 = 0;
+    sscanf(temp.c_str(), "%X\r", &rpm2);
+    
+    return AX2550_RPM(rpm1, -1*rpm2);
 }
 
 void AX2550::setInfoMsgCallback(void (*f)(const std::string &msg)) {

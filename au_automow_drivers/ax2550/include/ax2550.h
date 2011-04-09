@@ -4,10 +4,21 @@
 /* Includes */
 #include <iostream>
 #include <string>
+#include <sstream>
 
 #include "boost/thread/mutex.hpp"
 
 #include "serial.h"
+
+/* Structs */
+struct AX2550_RPM {
+    AX2550_RPM(signed char rpm1, signed char rpm2) {
+        this->rpm1 = rpm1;
+        this->rpm2 = rpm2;
+    };
+    signed char rpm1;
+    signed char rpm2;
+};
 
 /* Defines */
 
@@ -20,7 +31,13 @@ public:
     
     void connect();
     
+    void disconnect();
+    
     bool move(double speed, double direction);
+    
+    AX2550_RPM readRPM();
+    
+    // bool startReadingEncoders();
     
     void setInfoMsgCallback(void (*f)(const std::string &msg));
     void setErrorMsgCallback(void (*f)(const std::string &msg));
@@ -31,6 +48,7 @@ private:
     std::string port;
     bool connected;
     bool synced;
+    long timeout;
     boost::mutex mc_mutex;
     void (*info)(const std::string &msg);
     void (*error)(const std::string &msg);
@@ -68,6 +86,18 @@ public:
     virtual const char* what() const throw() {
         std::stringstream ss;
         ss << "Error moving with the AX2550: " << this->e_what;
+        return ss.str().c_str();
+    }
+};
+
+class QueryFailedException : public std::exception {
+    const char * e_what;
+public:
+    QueryFailedException(const char * e_what) {this->e_what = e_what;}
+    
+    virtual const char* what() const throw() {
+        std::stringstream ss;
+        ss << "Error querying the AX2550: " << this->e_what;
         return ss.str().c_str();
     }
 };
