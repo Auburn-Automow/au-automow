@@ -31,6 +31,8 @@ public:
     
     void connect();
     
+    bool isConnected();
+    
     void disconnect();
     
     bool move(double speed, double direction);
@@ -43,6 +45,7 @@ public:
     void setErrorMsgCallback(void (*f)(const std::string &msg));
 private:
     void sync();
+    bool isRCMessage(std::string data);
     
     serial::Serial serial_port;
     std::string port;

@@ -43,6 +43,10 @@ void AX2550::connect() {
     this->sync();
 }
 
+bool AX2550::isConnected() {
+    return this->connected;
+}
+
 void AX2550::disconnect() {
     // Join the encoder thread
     
@@ -64,7 +68,6 @@ void AX2550::sync() {
     // Ensure the motor controller is in radio mode by reseting
     this->serial_port.write("%rrrrrr\r");
     boost::this_thread::sleep(boost::posix_time::milliseconds(1000)); // Allow time to reset
-    std::string temp;
     
     // Place the system in Serial mode
     for(int i = 0; i < 10; ++i) {
@@ -72,8 +75,8 @@ void AX2550::sync() {
         boost::this_thread::sleep(boost::posix_time::milliseconds(25));
     }
     
-    temp = this->serial_port.read(1000);
-    if(temp.find("OK"))
+    std::string temp = this->serial_port.read(1000);
+    if(temp.length() > 0 && temp.find("OK") != std::string::npos)
         this->synced = true;
     
     if(!this->synced)
@@ -100,8 +103,10 @@ bool AX2550::move(double speed, double direction) {
     
     // Clear out any watchdogs with a poor man's flush
     this->serial_port.setTimeoutMilliseconds(1);
-    while(this->serial_port.read(1000).length() != 0)
-        continue;
+    std::string temp = this->serial_port.read(1000);
+    this->isRCMessage(temp);
+    while(temp.length() != 0)
+        temp = this->serial_port.read(1000);;
     this->serial_port.setTimeoutMilliseconds(this->timeout);
     
     char *serial_buffer = new char[5];
@@ -116,13 +121,17 @@ bool AX2550::move(double speed, double direction) {
     this->serial_port.write(serial_buffer, 5);
     
     // Read the echoed message
-    if(this->serial_port.read(5) != std::string(serial_buffer)) {
+    temp = this->serial_port.read(5);
+    this->isRCMessage(temp);
+    if(temp != std::string(serial_buffer)) {
         this->error("Error sending move command, speed was not properly echoed.");
         result = false;
     }
     
     // Read the command result (+ or -)
-    if(this->serial_port.read(2) != "+\r") {
+    temp = this->serial_port.read(2);
+    this->isRCMessage(temp);
+    if(temp != "+\r") {
         this->error("Error sending move command, NAK received on speed.");
         result = false;
     }
@@ -139,18 +148,34 @@ bool AX2550::move(double speed, double direction) {
     this->serial_port.write(serial_buffer, 5);
     
     // Read the echoed message
-    if(this->serial_port.read(5) != std::string(serial_buffer)) {
+    temp = this->serial_port.read(5);
+    this->isRCMessage(temp);
+    if(temp != std::string(serial_buffer)) {
         this->error("Error sending move command, direction was not properly echoed.");
         result = false;
     }
     
     // Read the command result (+ or -)
-    if(this->serial_port.read(2) != "+\r") {
+    temp = this->serial_port.read(2);
+    this->isRCMessage(temp);
+    if(temp != "+\r") {
         this->error("Error sending move command, NAK received on direction.");
         result = false;
     }
     
     return result;
+}
+
+bool AX2550::isRCMessage(std::string data) {
+    if(data.find(":") != std::string::npos) {
+        this->connected = false;
+        this->error("Motor controller out of sync.");
+        std::stringstream ss;
+        ss << "Length " << data.length() << ": " << data;
+        this->error(ss.str());
+        return true;
+    }
+    return false;
 }
 
 AX2550_RPM AX2550::readRPM() {
@@ -162,8 +187,11 @@ AX2550_RPM AX2550::readRPM() {
     
     // Clear out any watchdogs with a poor man's flush
     this->serial_port.setTimeoutMilliseconds(1);
-    while(this->serial_port.read(1000).length() != 0)
-        continue;
+    std::string temp = this->serial_port.read(1000);
+    if(this->isRCMessage(temp))
+        return AX2550_RPM(0,0);
+    while(temp.length() != 0)
+        temp = this->serial_port.read(1000);
     this->serial_port.setTimeoutMilliseconds(this->timeout);
     
     // Send the query
@@ -172,12 +200,16 @@ AX2550_RPM AX2550::readRPM() {
     }
     
     // Read the echo
-    if(this->serial_port.read(3) != "?z\r") {
+    temp = this->serial_port.read(3);
+    this->isRCMessage(temp);
+    if(temp != "?z\r") {
         throw(QueryFailedException("Error reading RPMs, failed to recieve the echo of the query."));
     }
     
     // Read the result
     std::string temp = this->serial_port.read(3);
+    temp = this->serial_port.read(3);
+    this->isRCMessage(temp);
     if(temp.length() != 3) {
         throw(QueryFailedException("Error reading RPMs, failed to recieve the response of the query."));
     }
@@ -188,6 +220,7 @@ AX2550_RPM AX2550::readRPM() {
     
     // Read the second result
     temp = this->serial_port.read(3);
+    this->isRCMessage(temp);
     if(temp.length() != 3) {
         throw(QueryFailedException("Error reading RPMs, failed to recieve the response of the query."));
     }
