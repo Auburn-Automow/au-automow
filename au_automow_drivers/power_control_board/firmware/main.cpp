@@ -122,6 +122,9 @@ void setup()
 {
     Serial.begin(57600);
     pinMode(13,OUTPUT);
+    
+    cc_msg.LeftControl = LOW;
+    cc_msg.RightControl = LOW;
 
     // Set up all of the Digital IO pins.
     pinMode(pin_leftCutterCheck,INPUT);
