@@ -1,0 +1,4 @@
+firmware/firmware
+firmware/Makefile
+firmware/firmware.hex
+firmware/cmake_install.cmake
