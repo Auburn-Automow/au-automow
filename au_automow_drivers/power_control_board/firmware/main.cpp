@@ -122,10 +122,11 @@ void setup()
 {
     Serial.begin(57600);
     pinMode(13,OUTPUT);
+    
 
     // Set up all of the Digital IO pins.
-    pinMode(pin_leftCutterCheck,INPUT);
-    pinMode(pin_rightCutterCheck,INPUT);
+    pinMode(pin_leftCutterCheck,OUTPUT);
+    pinMode(pin_rightCutterCheck,OUTPUT);
     pinMode(pin_leftCutterControl,OUTPUT);
     pinMode(pin_rightCutterControl,OUTPUT);
     // Turn off the cutters by default
@@ -163,63 +164,8 @@ void setup()
 
 void loop()
 {
-    for(;;) {
-        int c = Serial.read();
-        if (c == EOF)
-            break;
-        node.spin(c);
-    }
-    
-    float ADCVolts = analogRead(pin_voltage);
-    float ADCAmps = 504-analogRead(pin_current);
-    
-    int volts = ((ADCVolts/33.57)-23.0)*50.0;
-    voltaverage = (8*voltaverage + 2*volts)/10;
-    if(volts < 0)
-    {
-        batteryState = BS_DISCONNECT;
-        pcb_msg.StateofCharge = 0;
-    } else if(volts > 100) {
-        batteryState = BS_CHARGING;
-        pcb_msg.StateofCharge = 100;
-    } else if(volts < 20){
-        batteryState = BS_CRITICAL;
-        pcb_msg.StateofCharge = volts;
-    } else {
-        batteryState = BS_DISCHARGING;
-        pcb_msg.StateofCharge = volts;
-    }
-    
-    pcb_msg.LeftCutterStatus = (digitalRead(pin_leftCutterCheck) ? FALSE : TRUE);
-    pcb_msg.RightCutterStatus = (digitalRead(pin_rightCutterCheck) ? FALSE : TRUE);
-
-    if (ledMetro.check() == 1)
-    {
-        if(cutterLeftState && !pcb_msg.LeftCutterStatus)
-        {
-            pcb_msg.LeftCutterStatus = FALSE;
-            cutterLeftState= LOW;
-            digitalWrite(pin_leftCutterControl,LOW);
-            digitalWrite(13,HIGH);
-        }
-        if(cutterRightState&& !pcb_msg.RightCutterStatus)
-        {
-            pcb_msg.RightCutterStatus = FALSE;
-            cutterRightState = LOW;
-            digitalWrite(pin_rightCutterControl,LOW);
-            digitalWrite(13,LOW);
-        }
-        updateBatteryDisplay();
-    }
-
-    if (msgMetro.check() == 1)
-    {
-        pcb_msg.Voltage = ADCVolts/33.57;
-        pcb_msg.Current = ADCAmps/3.15;
-        pcb_msg.Temperature1 = temperatureTop.getTempCByIndex(0);
-        pcb_msg.Temperature2 = temperatureBot.getTempCByIndex(0);	
-        temperatureTop.requestTemperatures();
-        temperatureBot.requestTemperatures();
-        node.publish(pcb_node,&pcb_msg);
-    }
+   digitalWrite(pin_rightCutterControl,HIGH);
+   digitalWrite(pin_leftCutterControl,HIGH);
+   digitalWrite(pin_leftCutterCheck,LOW);
+   digitalWrite(pin_rightCutterCheck,LOW);
 }
