@@ -37,7 +37,7 @@ def encoderDataReceived(data):
     right = data.right * wheel_circum/encoder_resolution # right encoder ticks
     
     current_time = rospy.Time.now()
-
+    
     ### Do math here
     if(right == left):
         v = right
