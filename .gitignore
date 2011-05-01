@@ -10,3 +10,5 @@ msg*
 CMakeFiles*
 CMakeCache.txt
 *.bag
+*.a
+*.so

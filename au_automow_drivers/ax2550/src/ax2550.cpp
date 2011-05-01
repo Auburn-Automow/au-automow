@@ -48,8 +48,6 @@ bool AX2550::isConnected() {
 }
 
 void AX2550::disconnect() {
-    // Join the encoder thread
-    
     // Close the serial port
     if(this->serial_port.isOpen())
         this->serial_port.close();
@@ -89,12 +87,12 @@ bool AX2550::move(double speed, double direction) {
         throw(MovedFailedException("Must be connected to move."));
     
     // Bounds check speed and direction
-    if( (fabs(speed) > 1) || (fabs(direction) > 1) ) {
-        std::stringstream ss;
-        ss << "Error sending move command, speed " << speed << " or direction " << direction << " out of bounds.";
-        this->error(ss.str());
-        return false;
-    }
+    // if( (fabs(speed) > 1) || (fabs(direction) > 1) ) {
+    //         std::stringstream ss;
+    //         ss << "Error sending move command, speed " << speed << " or direction " << direction << " out of bounds.";
+    //         this->error(ss.str());
+    //         return false;
+    //     }
     
     bool result = true;
     
@@ -113,7 +111,7 @@ bool AX2550::move(double speed, double direction) {
     
     unsigned char speed_hex, direction_hex;
     
-    speed_hex = (unsigned char) (fabs(speed) * 127);
+    speed_hex = (unsigned char) (fabs(speed));// * 127);
     if(speed < 0)
         sprintf(serial_buffer, "!a%.2X\r", speed_hex);
     else
@@ -139,7 +137,7 @@ bool AX2550::move(double speed, double direction) {
     delete[] serial_buffer;
     serial_buffer = new char[5];
     
-    direction_hex = (unsigned char) (fabs(direction) * 127);
+    direction_hex = (unsigned char) (fabs(direction));// * 127);
     if(direction < 0)
         sprintf(serial_buffer, "!b%.2X\r", direction_hex);
     else
@@ -178,6 +176,87 @@ bool AX2550::isRCMessage(std::string data) {
     return false;
 }
 
+AX2550_ENCODER AX2550::readEncoders() {
+    if(!this->connected)
+        throw(QueryFailedException("Must be connected to query Encoders."));
+    
+    // Get the lock for reading/writing to the mc
+    boost::mutex::scoped_lock lock(this->mc_mutex);
+    
+    // Clear out any watchdogs with a poor man's flush
+    this->serial_port.setTimeoutMilliseconds(1);
+    std::string temp = this->serial_port.read(1000);
+    if(this->isRCMessage(temp))
+        return AX2550_ENCODER(0,0);
+    while(temp.length() != 0)
+        temp = this->serial_port.read(1000);
+    this->serial_port.setTimeoutMilliseconds(this->timeout);
+    
+    // Send the query
+    if(this->serial_port.write("?q4\r") != 4) {
+        throw(QueryFailedException("Error reading Encoders, failed to write to the motor controller."));
+    }
+    
+    // Read the echo
+    temp = this->serial_port.read(4);
+    this->isRCMessage(temp);
+    if(temp != "?q4\r") {
+        throw(QueryFailedException("Error reading Encoders, failed to recieve the echo of the query."));
+    }
+    
+    // Read the result
+    temp = this->serial_port.read_until('\r');
+    this->isRCMessage(temp);
+    // Strip the \r
+    temp = temp.substr(0,temp.length()-1);
+    
+    // Determine sign
+    char fillbyte = 'F';
+    if(temp.substr(0,1).find_first_of("01234567") != std::string::npos) // Then positive
+        fillbyte = '0';
+    
+    // Add filler bytes
+    while(temp.length() != 8)
+        temp = fillbyte + temp;
+    
+    // Convert to integer
+    signed int encoder1 = 0;
+    sscanf(temp.c_str(), "%X", &encoder1);
+    
+    // Send the query
+    if(this->serial_port.write("?q5\r") != 4) {
+        throw(QueryFailedException("Error reading Encoders, failed to write to the motor controller."));
+    }
+    
+    // Read the echo
+    temp = this->serial_port.read(4);
+    this->isRCMessage(temp);
+    if(temp != "?q5\r") {
+        throw(QueryFailedException("Error reading Encoders, failed to recieve the echo of the query."));
+    }
+    
+    // Read the result
+    temp = this->serial_port.read_until('\r');
+    this->isRCMessage(temp);
+    // Strip the \r
+    temp = temp.substr(0,temp.length()-1);
+    
+    // Determine sign
+    fillbyte = 'F';
+    if(temp.substr(0,1).find_first_of("01234567") != std::string::npos) // Then positive
+        fillbyte = '0';
+    
+    // Add filler bytes
+    while(temp.length() != 8)
+        temp = fillbyte + temp;
+    
+    // Convert to integer
+    signed int encoder2 = 0;
+    sscanf(temp.c_str(), "%X", &encoder2);
+    
+    return AX2550_ENCODER(encoder1,-1*encoder2);
+}
+
 AX2550_RPM AX2550::readRPM() {
     if(!this->connected)
         throw(QueryFailedException("Must be connected to query RPMs."));
@@ -207,7 +286,6 @@ AX2550_RPM AX2550::readRPM() {
     }
     
     // Read the result
-    std::string temp = this->serial_port.read(3);
     temp = this->serial_port.read(3);
     this->isRCMessage(temp);
     if(temp.length() != 3) {
@@ -228,6 +306,10 @@ AX2550_RPM AX2550::readRPM() {
     // Extract the data
     int rpm2 = 0;
     sscanf(temp.c_str(), "%X\r", &rpm2);
+    
+    std::stringstream ss;
+    ss << rpm1 << " " << rpm2;
+    this->info(ss.str());
     
     return AX2550_RPM(rpm1, -1*rpm2);
 }

@@ -1,4 +1,4 @@
-port: /dev/ttyUSB0
+port: /dev/power_control
 name : PowerControlBoard 
 publish:
  PowerControl: #topic name

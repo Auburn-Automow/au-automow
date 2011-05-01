@@ -11,6 +11,15 @@
 #include "serial.h"
 
 /* Structs */
+struct AX2550_ENCODER {
+    AX2550_ENCODER(signed char encoder1, signed char encoder2) {
+        this->encoder1 = encoder1;
+        this->encoder2 = encoder2;
+    };
+    signed char encoder1;
+    signed char encoder2;
+};
+
 struct AX2550_RPM {
     AX2550_RPM(signed char rpm1, signed char rpm2) {
         this->rpm1 = rpm1;
@@ -37,9 +46,9 @@ public:
     
     bool move(double speed, double direction);
     
-    AX2550_RPM readRPM();
+    AX2550_ENCODER readEncoders();
     
-    // bool startReadingEncoders();
+    AX2550_RPM readRPM();
     
     void setInfoMsgCallback(void (*f)(const std::string &msg));
     void setErrorMsgCallback(void (*f)(const std::string &msg));
