@@ -1,0 +1,29 @@
+$PASHS,SPD,A,9
+$PASHS,SPD,B,9
+
+; Turn on all of the RTCM messages
+$PASHS,RTC,TYP,1,0
+$PASHS,RTC,TYP,2,0
+$PASHS,RTC,TYP,3,0.002
+$PASHS,RTC,TYP,22,0.002
+$PASHS,RTC,TYP,18,0.2
+$PASHS,RTC,TYP,19,0.2
+$PASHS,RTC,MSG,AUBURN AUTOMOW 2011
+
+; Turn on RTK mode
+$PASHS,RTC,BAS,B
+$PASHS,ELM,0
+$PASHS,PEM,0
+; Do code smoothing
+$PASHS,SMI,600,2
+$PASHS,CRR,S
+; Station Identifier (Fourteen and 0)
+$PASHS,RTC,STI,0140
+; Burst Mode (highest speed available)
+$PASHS,RTC,SPD,9
+; Turn on local messages
+$PASHS,NME,MSG,A,ON
+
+$PASHS,POS,3236.28000260,N,8529.1711204,W,170.0380
+; Save to PROM
+$PASHS,SAV,Y

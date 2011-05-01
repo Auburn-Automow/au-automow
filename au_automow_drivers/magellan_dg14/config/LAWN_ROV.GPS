@@ -1,0 +1,27 @@
+; 115200 Baud on Port B
+$PASHS,SPD,B,9
+; Carrier-Code Smoothing, Second Order, 600 Epochs
+$PASHS,SMI,600,2
+; Position Elevation Mask
+$PASHS,PEM,5
+; Autonomous (Works without differential corrections)
+$PASHS,RTC,AUT,Y
+; Integer Ambiguity confidence level: 99%
+$PASHS,CPD,AFP,99
+; Maximum age of corrections: 60 seconds
+$PASHS,CPD,MAX,60
+; Fast RTK Option
+$PASHS,CPD,FST,ON
+
+; Other things I'm not positive about
+; Dynamic Index (rover speed) set to ship, walking too slow
+$PASHS,DYN,3
+$PASHS,CRR,S
+; Save to PROM
+
+; Fixed Base
+$PASHS,CPD,BAS,0
+; RTK Rover Operation Enable
+$PASHS,CPD,MOD,ROV
+
+$PASHS,SAV,Y
