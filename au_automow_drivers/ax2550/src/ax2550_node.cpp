@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "geometry_msgs/Twist.h"
 #include "nav_msgs/Odometry.h"
+#include "ax2550/Encoders.h"
 #include "tf/tf.h"
 
 #include <string>
@@ -8,8 +9,9 @@
 
 #include "ax2550.h"
 
-AX2550 *ax2550;
+AX2550 *mc;
 ros::Publisher odom_pub;
+ros::Publisher encoder_pub;
 
 static double ENCODER_RESOLUTION = 250*4;
 double wheel_circumference = 0.0;
@@ -25,7 +27,7 @@ double prev_x = 0, prev_y = 0, prev_w = 0;
 ros::Time prev_time;
 
 void cmd_velCallback(const geometry_msgs::Twist::ConstPtr& msg) {
-    if(ax2550 == NULL || !ax2550->isConnected())
+    if(mc == NULL || !mc->isConnected())
         return;
     // Convert mps to rpm
     double A = msg->linear.x;
@@ -50,9 +52,9 @@ void cmd_velCallback(const geometry_msgs::Twist::ConstPtr& msg) {
     if(B_rel < -1*B_MAX)
         B_rel = -1*B_MAX;
     
-    ROS_INFO("%f %f", A_rel, B_rel);
+    // ROS_INFO("%f %f", A_rel, B_rel);
     
-    ax2550->move(A_rel, B_rel);
+    mc->move(A_rel, B_rel);
 }
 
 void errorMsgCallback(const std::string &msg) {
@@ -65,13 +67,13 @@ void infoMsgCallback(const std::string &msg) {
 
 void encoderCallback(const ros::TimerEvent& e) {
     // Make sure we are connected
-    if(!ros::ok() || ax2550 == NULL || !ax2550->isConnected())
+    if(!ros::ok() || mc == NULL || !mc->isConnected())
         return;
     
     AX2550_ENCODER ax2550_encoder(0,0);
     // Retreive the data
     try {
-        ax2550_encoder = ax2550->readEncoders();
+        ax2550_encoder = mc->readEncoders();
         // ROS_INFO("Encoder Data: %d, %d", ax2550_encoder.encoder1, ax2550_encoder.encoder2);
     } catch(std::exception &e) {
         ROS_ERROR("Error reading the Encoders: %s", e.what());
@@ -80,55 +82,62 @@ void encoderCallback(const ros::TimerEvent& e) {
     ros::Time now = ros::Time::now();
     
     // Convert to mps for each wheel from delta encoder ticks
-    double left_v = ax2550_encoder.encoder1 * wheel_circumference / ENCODER_RESOLUTION;
-    double right_v = ax2550_encoder.encoder2 * wheel_circumference / ENCODER_RESOLUTION;
+    double left_v = ax2550_encoder.encoder1 * 2*M_PI / ENCODER_RESOLUTION;
+    double right_v = ax2550_encoder.encoder2 * 2*M_PI / ENCODER_RESOLUTION;
     
-    double v = 0.0;
-    double w = 0.0;
+    ax2550::Encoders encoder_msg;
     
-    // Do inverse kinematics
-    if(left_v == right_v) {
-        v = left_v;
-        w = 0.0;
-    } else if(left_v == -1*right_v) {
-        v = 0.0;
-        w = (2.0/wheel_base_length) * left_v;
-    } else {
-        v = (left_v+right_v)/2.0;
-        w = 2.0*(right_v-left_v)/wheel_base_length;
-    }
+    encoder_msg.left_wheel = left_v;
+    encoder_msg.right_wheel = right_v;
     
-    // Accumulate
-    prev_w += w;
-    prev_x += v * cos(prev_w);
-    prev_y += v * sin(prev_w);
-    double delta_time = (now - prev_time).toSec();
-    prev_time = now;
+    encoder_pub.publish(encoder_msg);
     
-    // ROS_INFO("%f", prev_w);
-    
-    geometry_msgs::Quaternion quat = tf::createQuaternionMsgFromYaw(prev_w);
-    
-    // Populate the msg
-    nav_msgs::Odometry odom_msg;
-    odom_msg.header.stamp = now;
-    odom_msg.header.frame_id = odom_frame_id;
-    odom_msg.pose.pose.position.x = prev_x;
-    odom_msg.pose.pose.position.y = prev_y;
-    odom_msg.pose.pose.orientation = quat;
-    odom_msg.pose.covariance[0] = 1e-5;
-    odom_msg.pose.covariance[7] = 1e-5;
-    odom_msg.pose.covariance[14] = 1e100;
-    odom_msg.pose.covariance[21] = 1e100;
-    odom_msg.pose.covariance[28] = 1e100;
-    odom_msg.pose.covariance[35] = 1e-3;
-    
-    odom_msg.twist.twist.linear.x = v/delta_time;
-    odom_msg.twist.twist.angular.z = w/delta_time;
-    
-    odom_pub.publish(odom_msg);
-    
-    // TODO: Add TF broadcaster
+    // double v = 0.0;
+    //     double w = 0.0;
+    //     
+    //     // Do inverse kinematics
+    //     if(left_v == right_v) {
+    //         v = left_v;
+    //         w = 0.0;
+    //     } else if(left_v == -1*right_v) {
+    //         v = 0.0;
+    //         w = (2.0/wheel_base_length) * left_v;
+    //     } else {
+    //         v = (left_v+right_v)/2.0;
+    //         w = 2.0*(right_v-left_v)/wheel_base_length;
+    //     }
+    //     
+    //     // Accumulate
+    //     prev_w += w;
+    //     prev_x += v * cos(prev_w);
+    //     prev_y += v * sin(prev_w);
+    //     double delta_time = (now - prev_time).toSec();
+    //     prev_time = now;
+    //     
+    //     // ROS_INFO("%f", prev_w);
+    //     
+    //     geometry_msgs::Quaternion quat = tf::createQuaternionMsgFromYaw(prev_w);
+    //     
+    //     // Populate the msg
+    //     nav_msgs::Odometry odom_msg;
+    //     odom_msg.header.stamp = now;
+    //     odom_msg.header.frame_id = odom_frame_id;
+    //     odom_msg.pose.pose.position.x = prev_x;
+    //     odom_msg.pose.pose.position.y = prev_y;
+    //     odom_msg.pose.pose.orientation = quat;
+    //     odom_msg.pose.covariance[0] = 1e-5;
+    //     odom_msg.pose.covariance[7] = 1e-5;
+    //     odom_msg.pose.covariance[14] = 1e100;
+    //     odom_msg.pose.covariance[21] = 1e100;
+    //     odom_msg.pose.covariance[28] = 1e100;
+    //     odom_msg.pose.covariance[35] = 1e-3;
+    //     
+    //     odom_msg.twist.twist.linear.x = v/delta_time;
+    //     odom_msg.twist.twist.angular.z = w/delta_time;
+    //     
+    //     odom_pub.publish(odom_msg);
+    //     
+    //     // TODO: Add TF broadcaster
 }
 
 int main(int argc, char **argv) {
@@ -160,26 +169,29 @@ int main(int argc, char **argv) {
     // Odometry Publisher
     odom_pub = n.advertise<nav_msgs::Odometry>("odom", 5);
     
+    // Encoder Publisher
+    encoder_pub = n.advertise<ax2550::Encoders>("encoders", 5);
+    
     // cmd_vel Subscriber
     ros::Subscriber sub = n.subscribe("cmd_vel", 1, cmd_velCallback);
     
     while(ros::ok()) {
         ROS_INFO("AX2550 connecting to port %s", port.c_str());
         try {
-            ax2550 = new AX2550(port);
-            ax2550->setErrorMsgCallback(errorMsgCallback);
-            ax2550->setInfoMsgCallback(infoMsgCallback);
-            ax2550->connect();
+            mc = new AX2550(port);
+            mc->setErrorMsgCallback(errorMsgCallback);
+            mc->setInfoMsgCallback(infoMsgCallback);
+            mc->connect();
         } catch(std::exception &e) {
             ROS_ERROR("Failed to connect to the AX2550: %s", e.what());
         }
-        while(ax2550->isConnected()) {
+        while(mc->isConnected()) {
             if(!ros::ok())
                 break;
             ros::spinOnce();
         }
-        delete ax2550;
-        ax2550 = NULL;
+        delete mc;
+        mc = NULL;
         if(!ros::ok())
             break;
         ROS_WARN("Will try to resync in 1 sec.");
