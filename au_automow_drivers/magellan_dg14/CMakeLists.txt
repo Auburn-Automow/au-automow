@@ -8,6 +8,7 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
 #set(ROS_BUILD_TYPE RelWithDebInfo)
+set(ROS_BUILD_TYPE Debug)
 
 rosbuild_init()
 
@@ -15,6 +16,11 @@ rosbuild_init()
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
+
+# Check for OS X and if so disable kqueue support in asio
+IF(CMAKE_SYSTEM_NAME MATCHES Darwin)
+    add_definitions(-DBOOST_ASIO_DISABLE_KQUEUE)
+ENDIF(CMAKE_SYSTEM_NAME MATCHES Darwin)
 
 #uncomment if you have defined messages
 rosbuild_genmsg()
@@ -28,3 +34,8 @@ rosbuild_genmsg()
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 #rosbuild_add_executable(example examples/example.cpp)
 #target_link_libraries(example ${PROJECT_NAME})
+
+rosbuild_add_boost_directories()
+rosbuild_add_executable(dg14_driver src/dg14_driver.cc src/dg14.cc)
+rosbuild_link_boost(dg14_driver program_options thread system)
+

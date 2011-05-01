@@ -9,9 +9,11 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/dg14</url>
   <depend package="rospy"/>
+  <depend package="roscpp" />
   <depend package="tf"/>
   <depend package="nav_msgs"/>
-
+  <depend package="gps_common"/>
+  <depend package="serial" />
 </package>
 
 

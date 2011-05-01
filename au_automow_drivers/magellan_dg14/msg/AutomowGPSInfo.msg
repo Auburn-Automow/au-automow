@@ -83,6 +83,12 @@ int32[] satellite_z # Elevation of satellites
 int32[] satellite_azimuth # Azimuth of satellites
 int32[] satellite_snr # Signal-to-noise ratios (dB)
 
+uint8 position_type
+uint8 PT_STANDALONE=0   # Standalone Mode
+uint8 PT_DIFF_MODE=1    # Differential Mode
+uint8 PT_FLYING_RTK=2   # Flying RTK
+uint8 PT_fIXED_RTK=4    # Fixed RTK
+
 # Measurement status
 uint16 STATUS_NO_FIX=0   # Unable to fix position
 uint16 STATUS_FIX=1      # Normal fix
