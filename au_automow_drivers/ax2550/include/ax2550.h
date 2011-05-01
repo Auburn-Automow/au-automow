@@ -50,8 +50,6 @@ public:
     
     AX2550_RPM readRPM();
     
-    // bool startReadingEncoders();
-    
     void setInfoMsgCallback(void (*f)(const std::string &msg));
     void setErrorMsgCallback(void (*f)(const std::string &msg));
 private:

@@ -50,9 +50,9 @@ void cmd_velCallback(const geometry_msgs::Twist::ConstPtr& msg) {
     if(B_rel < -1*B_MAX)
         B_rel = -1*B_MAX;
     
-    // ROS_INFO("%f %f", A_rel/127.0, B_rel/127.0);
+    ROS_INFO("%f %f", A_rel, B_rel);
     
-    ax2550->move(A_rel/127.0, B_rel/127.0);
+    ax2550->move(A_rel, B_rel);
 }
 
 void errorMsgCallback(const std::string &msg) {
@@ -105,7 +105,7 @@ void encoderCallback(const ros::TimerEvent& e) {
     double delta_time = (now - prev_time).toSec();
     prev_time = now;
     
-    ROS_INFO("%f", prev_w);
+    // ROS_INFO("%f", prev_w);
     
     geometry_msgs::Quaternion quat = tf::createQuaternionMsgFromYaw(prev_w);
     

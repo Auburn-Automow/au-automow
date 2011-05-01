@@ -87,12 +87,12 @@ bool AX2550::move(double speed, double direction) {
         throw(MovedFailedException("Must be connected to move."));
     
     // Bounds check speed and direction
-    if( (fabs(speed) > 1) || (fabs(direction) > 1) ) {
-        std::stringstream ss;
-        ss << "Error sending move command, speed " << speed << " or direction " << direction << " out of bounds.";
-        this->error(ss.str());
-        return false;
-    }
+    // if( (fabs(speed) > 1) || (fabs(direction) > 1) ) {
+    //         std::stringstream ss;
+    //         ss << "Error sending move command, speed " << speed << " or direction " << direction << " out of bounds.";
+    //         this->error(ss.str());
+    //         return false;
+    //     }
     
     bool result = true;
     
@@ -111,7 +111,7 @@ bool AX2550::move(double speed, double direction) {
     
     unsigned char speed_hex, direction_hex;
     
-    speed_hex = (unsigned char) (fabs(speed) * 127);
+    speed_hex = (unsigned char) (fabs(speed));// * 127);
     if(speed < 0)
         sprintf(serial_buffer, "!a%.2X\r", speed_hex);
     else
@@ -137,7 +137,7 @@ bool AX2550::move(double speed, double direction) {
     delete[] serial_buffer;
     serial_buffer = new char[5];
     
-    direction_hex = (unsigned char) (fabs(direction) * 127);
+    direction_hex = (unsigned char) (fabs(direction));// * 127);
     if(direction < 0)
         sprintf(serial_buffer, "!b%.2X\r", direction_hex);
     else
