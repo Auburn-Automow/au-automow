@@ -18,6 +18,7 @@
 #include <gps_common/GPSStatus.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/NavSatStatus.h>
+#include <magellan_dg14/UTMFix.h>
 
 using namespace gps_common;
 using namespace sensor_msgs;
@@ -56,6 +57,7 @@ class Gps {
             testing = false;
             
             gps_fix_pub = node.advertise<GPSFix>("extended_fix", 1);
+            utm_fix_pub = node.advertise<magellan_dg14::UTMFix>("utm_fix", 1);
             navsat_fix_pub = node.advertise<NavSatFix>("fix", 1);
             gps_timer = node.createTimer(ros::Duration(1.0/10.0), &Gps::publish_callback, this);
             return true;
@@ -121,6 +123,10 @@ class Gps {
                      tokens[1] == "SAT") {
                 process_data_sat(tokens);
             }
+            else if (tokens[0] == "$PASHR" && 
+                     tokens[1] == "UTM") {
+                process_data_utm(tokens);
+            }
             else if (tokens[0] == "$GPGST") {
                 process_data_gst(tokens);
             }
@@ -142,7 +148,47 @@ class Gps {
             gps_fix_pub.publish(fix); // Its a new pos.
         }
     private:
-
+        
+        void process_data_utm(vector<string> &tokens) {
+            magellan_dg14::UTMFix utm_fix;
+            utm_fix.header.stamp = ros::Time::now();
+            utm_fix.header.frame_id = "gps_link";
+            utm_fix.utc_time = strtod(tokens[2].c_str(), NULL);
+            utm_fix.utm_zone = tokens[3];
+            utm_fix.easting = strtod(tokens[4].c_str(), NULL);
+            utm_fix.northing = strtod(tokens[5].c_str(), NULL);
+            /* status msgs 
+             * int16 FIX_TYPE_NONE = 0
+             * int16 FIX_TYPE_RAW = 1
+             * int16 FIX_TYPE_FLOAT = 2
+             * int16 FIX_TYPE_FIXED = 3
+             */
+            int mode = atoi(tokens[6].c_str());
+            if (mode == 0) {
+                utm_fix.fix_type = 0;
+            }
+            else if (mode == 1) {
+                utm_fix.fix_type = 1;
+            }
+            else if (mode == 2) {
+                utm_fix.fix_type = 2;
+            }
+            else if (mode == 3) {
+                utm_fix.fix_type = 3;
+            }
+            else {
+                utm_fix.fix_type = -1;
+            }
+            utm_fix.num_satellites = atoi(tokens[7].c_str());
+            utm_fix.hdop = strtod(tokens[8].c_str(), NULL);
+            utm_fix.antenna_height = strtod(tokens[9].c_str(), NULL);
+            utm_fix.geoidal_separation = strtod(tokens[11].c_str(), NULL);
+            utm_fix.differential_corrections_age = atoi(tokens[13].c_str());
+            utm_fix.differential_station_id = tokens[14];
+            utm_fix.position_covariance = fix.position_covariance;
+            utm_fix_pub.publish(utm_fix);
+        }
+        
         void process_data_pos(vector<string> &tokens) {
             /* status msgs 
              * int16 STATUS_NO_FIX=-1   # Unable to fix position
@@ -201,9 +247,9 @@ class Gps {
         }
         
         void process_data_gst(vector<string> &tokens) {
-            fix.position_covariance[0] = pow(strtod(tokens[6].c_str(), NULL), 2.0);
-            fix.position_covariance[4] = pow(strtod(tokens[7].c_str(), NULL), 2.0);
-            fix.position_covariance[8] = pow(strtod(tokens[8].c_str(), NULL), 2.0);
+            fix.position_covariance[0] = strtod(tokens[6].c_str(), NULL);
+            fix.position_covariance[4] = strtod(tokens[7].c_str(), NULL);
+            fix.position_covariance[8] = strtod(tokens[8].c_str(), NULL);
             fix.position_covariance_type = NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN;
             utc_time = strtod(tokens[1].c_str(), NULL);
         }
@@ -243,6 +289,7 @@ class Gps {
         ros::NodeHandle node;
         ros::NodeHandle privnode;
         ros::Publisher  gps_fix_pub;
+        ros::Publisher  utm_fix_pub;
         ros::Publisher  navsat_fix_pub;
         serial::Serial  s_;
         ros::Timer      gps_timer;
