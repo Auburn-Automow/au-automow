@@ -164,21 +164,25 @@ class Gps {
              * int16 FIX_TYPE_FIXED = 3
              */
             int mode = atoi(tokens[6].c_str());
-            if (mode == 0) {
-                utm_fix.fix_type = 0;
-            }
-            else if (mode == 1) {
-                utm_fix.fix_type = 1;
-            }
-            else if (mode == 2) {
-                utm_fix.fix_type = 2;
-            }
-            else if (mode == 3) {
-                utm_fix.fix_type = 3;
-            }
-            else {
-                utm_fix.fix_type = -1;
-            }
+            utm_fix.fix_type = mode;
+            // if (mode == 0) {
+            //     utm_fix.fix_type = 0;
+            // }
+            // else if (mode == 1) {
+            //     utm_fix.fix_type = 1;
+            // }
+            // else if (mode == 2) {
+            //     utm_fix.fix_type = 2;
+            // }
+            // else if (mode == 3) {
+            //     utm_fix.fix_type = 3;
+            // }
+            // else if (mode == 4) {
+            //     utm_fix.fix_type = 4;
+            // }
+            // else {
+            //     utm_fix.fix_type = -1;
+            // }
             utm_fix.num_satellites = atoi(tokens[7].c_str());
             utm_fix.hdop = strtod(tokens[8].c_str(), NULL);
             utm_fix.antenna_height = strtod(tokens[9].c_str(), NULL);
