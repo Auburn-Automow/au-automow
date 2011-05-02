@@ -80,6 +80,11 @@ void encoderCallback(const ros::TimerEvent& e) {
         // ROS_INFO("Encoder Data: %d, %d", ax2550_encoder.encoder1, ax2550_encoder.encoder2);
     } catch(std::exception &e) {
         ROS_ERROR("Error reading the Encoders: %s", e.what());
+        if(!mc->ping()) {
+            ROS_ERROR("No response from the motor controller, disconnecting.");
+            mc->disconnect();
+        }
+        return;
     }
     // Grab the time
     ros::Time now = ros::Time::now();
@@ -208,6 +213,7 @@ int main(int argc, char **argv) {
             mc->connect();
         } catch(std::exception &e) {
             ROS_ERROR("Failed to connect to the AX2550: %s", e.what());
+            mc->disconnect();
         }
         while(mc->isConnected()) {
             if(!ros::ok())
@@ -218,8 +224,8 @@ int main(int argc, char **argv) {
         mc = NULL;
         if(!ros::ok())
             break;
-        ROS_WARN("Will try to resync in 1 sec.");
-        ros::Duration(1).sleep();
+        ROS_INFO("Will try to reconnect to the AX2550 in 5 seconds.");
+        ros::Duration(5).sleep();
     }
     
     return 0;
