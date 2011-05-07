@@ -2,9 +2,6 @@ build*
 bin*
 cpp*
 .*
-src*
-srv*
-msg*
 *.pyc
 *.pyo
 CMakeFiles*
