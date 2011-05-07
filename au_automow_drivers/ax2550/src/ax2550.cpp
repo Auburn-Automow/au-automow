@@ -47,10 +47,52 @@ bool AX2550::isConnected() {
     return this->connected;
 }
 
+bool AX2550::ping() {
+    try {
+        if(!this->connected)
+            throw(QueryFailedException("Must be connected to ping."));
+
+        // Get the lock for reading/writing to the mc
+        boost::mutex::scoped_lock lock(this->mc_mutex);
+
+        // Clear out any watchdogs with a poor man's flush
+        this->serial_port.setTimeoutMilliseconds(1);
+        std::string temp = this->serial_port.read(1000);
+        if(this->isRCMessage(temp))
+            return false;
+        while(temp.length() != 0)
+            temp = this->serial_port.read(1000);
+        this->serial_port.setTimeoutMilliseconds(this->timeout);
+
+        // Send the query
+        if(this->serial_port.write("?z\r") != 3) {
+            throw(QueryFailedException("Error reading RPMs, failed to write to the motor controller."));
+        }
+
+        // Read the echo
+        temp = this->serial_port.read(3);
+        this->isRCMessage(temp);
+        if(temp != "?z\r") {
+            throw(QueryFailedException("Error reading RPMs, failed to recieve the echo of the query."));
+        }
+
+        // Read the result
+        temp = this->serial_port.read(3);
+        this->isRCMessage(temp);
+        if(temp.length() != 3) {
+            throw(QueryFailedException("Error reading RPMs, failed to recieve the response of the query."));
+        }
+    } catch(std::exception &e) {
+        return false;
+    }
+    return true;
+}
+
 void AX2550::disconnect() {
     // Close the serial port
     if(this->serial_port.isOpen())
         this->serial_port.close();
+    this->connected = false;
 }
 
 inline void printHex(char * data, int length) {

@@ -36,6 +36,6 @@ rosbuild_genmsg()
 #target_link_libraries(example ${PROJECT_NAME})
 
 rosbuild_add_boost_directories()
-rosbuild_add_executable(dg14_driver src/dg14_driver.cc src/dg14.cc)
+rosbuild_add_executable(dg14_driver src/dg14_driver.cc)
 rosbuild_link_boost(dg14_driver program_options thread system)
 

@@ -3,6 +3,7 @@
 #include "nav_msgs/Odometry.h"
 #include "ax2550/Encoders.h"
 #include "tf/tf.h"
+#include <tf/transform_broadcaster.h>
 
 #include <string>
 #include <cmath>
@@ -12,11 +13,13 @@
 AX2550 *mc;
 ros::Publisher odom_pub;
 ros::Publisher encoder_pub;
+tf::TransformBroadcaster *odom_broadcaster;
 
 static double ENCODER_RESOLUTION = 250*4;
 double wheel_circumference = 0.0;
 double wheel_base_length = 0.0;
 double wheel_diameter = 0.0;
+double encoder_poll_rate;
 std::string odom_frame_id;
 
 static double A_MAX = 20.0;
@@ -77,13 +80,25 @@ void encoderCallback(const ros::TimerEvent& e) {
         // ROS_INFO("Encoder Data: %d, %d", ax2550_encoder.encoder1, ax2550_encoder.encoder2);
     } catch(std::exception &e) {
         ROS_ERROR("Error reading the Encoders: %s", e.what());
+        if(!mc->ping()) {
+            ROS_ERROR("No response from the motor controller, disconnecting.");
+            mc->disconnect();
+        }
+        return;
     }
     // Grab the time
     ros::Time now = ros::Time::now();
     
+    double delta_time = (now - prev_time).toSec();
+    prev_time = now;
+    
     // Convert to mps for each wheel from delta encoder ticks
     double left_v = ax2550_encoder.encoder1 * 2*M_PI / ENCODER_RESOLUTION;
+    left_v /= delta_time;
+    // left_v *= encoder_poll_rate;
     double right_v = ax2550_encoder.encoder2 * 2*M_PI / ENCODER_RESOLUTION;
+    right_v /= delta_time;
+    // right_v *= encoder_poll_rate;
     
     ax2550::Encoders encoder_msg;
     
@@ -92,52 +107,64 @@ void encoderCallback(const ros::TimerEvent& e) {
     
     encoder_pub.publish(encoder_msg);
     
-    // double v = 0.0;
-    //     double w = 0.0;
+    double v = 0.0;
+    double w = 0.0;
+    
+    left_v = ax2550_encoder.encoder1 * wheel_diameter / ENCODER_RESOLUTION;
+    right_v = ax2550_encoder.encoder2 * wheel_diameter / ENCODER_RESOLUTION;
+    
+    // Do inverse kinematics
+    if(left_v == right_v) {
+        v = left_v;
+        w = 0.0;
+    } else if(left_v == -1*right_v) {
+        v = 0.0;
+        w = (2.0/wheel_base_length) * left_v;
+    } else {
+        v = (left_v+right_v)/2.0;
+        w = 2.0*(right_v-left_v)/wheel_base_length;
+    }
+    
+    // Accumulate
+    prev_w += w;
+    prev_x += v * cos(prev_w);
+    prev_y += v * sin(prev_w);
+    
+    // ROS_INFO("%f", prev_w);
+    
+    geometry_msgs::Quaternion quat = tf::createQuaternionMsgFromYaw(prev_w);
+    
+    // Populate the msg
+    nav_msgs::Odometry odom_msg;
+    odom_msg.header.stamp = now;
+    odom_msg.header.frame_id = odom_frame_id;
+    odom_msg.pose.pose.position.x = prev_x;
+    odom_msg.pose.pose.position.y = prev_y;
+    odom_msg.pose.pose.orientation = quat;
+    odom_msg.pose.covariance[0] = 1e-5;
+    odom_msg.pose.covariance[7] = 1e-5;
+    odom_msg.pose.covariance[14] = 1e100;
+    odom_msg.pose.covariance[21] = 1e100;
+    odom_msg.pose.covariance[28] = 1e100;
+    odom_msg.pose.covariance[35] = 1e-3;
+    
+    odom_msg.twist.twist.linear.x = v/delta_time;
+    odom_msg.twist.twist.angular.z = w/delta_time;
+    
+    odom_pub.publish(odom_msg);
+    
+    // TODO: Add TF broadcaster
+    // geometry_msgs::TransformStamped odom_trans;
+    //     odom_trans.header.stamp = now;
+    //     odom_trans.header.frame_id = "odom";
+    //     odom_trans.child_frame_id = "base_footprint";
+    // 
+    //     odom_trans.transform.translation.x = prev_x;
+    //     odom_trans.transform.translation.y = prev_y;
+    //     odom_trans.transform.translation.z = 0.0;
+    //     odom_trans.transform.rotation = quat;
     //     
-    //     // Do inverse kinematics
-    //     if(left_v == right_v) {
-    //         v = left_v;
-    //         w = 0.0;
-    //     } else if(left_v == -1*right_v) {
-    //         v = 0.0;
-    //         w = (2.0/wheel_base_length) * left_v;
-    //     } else {
-    //         v = (left_v+right_v)/2.0;
-    //         w = 2.0*(right_v-left_v)/wheel_base_length;
-    //     }
-    //     
-    //     // Accumulate
-    //     prev_w += w;
-    //     prev_x += v * cos(prev_w);
-    //     prev_y += v * sin(prev_w);
-    //     double delta_time = (now - prev_time).toSec();
-    //     prev_time = now;
-    //     
-    //     // ROS_INFO("%f", prev_w);
-    //     
-    //     geometry_msgs::Quaternion quat = tf::createQuaternionMsgFromYaw(prev_w);
-    //     
-    //     // Populate the msg
-    //     nav_msgs::Odometry odom_msg;
-    //     odom_msg.header.stamp = now;
-    //     odom_msg.header.frame_id = odom_frame_id;
-    //     odom_msg.pose.pose.position.x = prev_x;
-    //     odom_msg.pose.pose.position.y = prev_y;
-    //     odom_msg.pose.pose.orientation = quat;
-    //     odom_msg.pose.covariance[0] = 1e-5;
-    //     odom_msg.pose.covariance[7] = 1e-5;
-    //     odom_msg.pose.covariance[14] = 1e100;
-    //     odom_msg.pose.covariance[21] = 1e100;
-    //     odom_msg.pose.covariance[28] = 1e100;
-    //     odom_msg.pose.covariance[35] = 1e-3;
-    //     
-    //     odom_msg.twist.twist.linear.x = v/delta_time;
-    //     odom_msg.twist.twist.angular.z = w/delta_time;
-    //     
-    //     odom_pub.publish(odom_msg);
-    //     
-    //     // TODO: Add TF broadcaster
+    //     odom_broadcaster->sendTransform(odom_trans);
 }
 
 int main(int argc, char **argv) {
@@ -162,8 +189,7 @@ int main(int argc, char **argv) {
     n.param("odom_frame_id", odom_frame_id, std::string("odom"));
     
     // Setup Encoder polling
-    double encoder_poll_rate;
-    n.param("encoder_poll_rate", encoder_poll_rate, 50.0);
+    n.param("encoder_poll_rate", encoder_poll_rate, 25.0);
     ros::Timer encoder_timer = n.createTimer(ros::Duration(1.0/encoder_poll_rate), encoderCallback);
     
     // Odometry Publisher
@@ -171,6 +197,9 @@ int main(int argc, char **argv) {
     
     // Encoder Publisher
     encoder_pub = n.advertise<ax2550::Encoders>("encoders", 5);
+    
+    // TF Broadcaster
+    odom_broadcaster = new tf::TransformBroadcaster;
     
     // cmd_vel Subscriber
     ros::Subscriber sub = n.subscribe("cmd_vel", 1, cmd_velCallback);
@@ -184,6 +213,7 @@ int main(int argc, char **argv) {
             mc->connect();
         } catch(std::exception &e) {
             ROS_ERROR("Failed to connect to the AX2550: %s", e.what());
+            mc->disconnect();
         }
         while(mc->isConnected()) {
             if(!ros::ok())
@@ -194,8 +224,8 @@ int main(int argc, char **argv) {
         mc = NULL;
         if(!ros::ok())
             break;
-        ROS_WARN("Will try to resync in 1 sec.");
-        ros::Duration(1).sleep();
+        ROS_INFO("Will try to reconnect to the AX2550 in 5 seconds.");
+        ros::Duration(5).sleep();
     }
     
     return 0;

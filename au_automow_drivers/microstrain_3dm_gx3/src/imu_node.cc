@@ -459,7 +459,7 @@ public:
     yaw+=M_PIl;
     if (yaw > M_PIl)
       yaw-=2*M_PIl;
-
+//    ROS_INFO("Yaw: %f", yaw*180.0/M_PI);
   tf::quaternionTFToMsg(tf::createQuaternionFromRPY(-roll, pitch, -yaw), data.orientation);
 
   }
