@@ -1,7 +1,7 @@
 #include "ros/ros.h"
 #include "geometry_msgs/Twist.h"
 #include "nav_msgs/Odometry.h"
-#include "ax2550/Encoders.h"
+#include "ax2550/StampedEncoders.h"
 #include "tf/tf.h"
 #include <tf/transform_broadcaster.h>
 
@@ -99,12 +99,12 @@ void encoderCallback(const ros::TimerEvent& e) {
     right_v /= delta_time;
     // right_v *= encoder_poll_rate;
     
-    ax2550::Encoders encoder_msg;
+    ax2550::StampedEncoders encoder_msg;
     
     encoder_msg.header.stamp = now;
     encoder_msg.header.frame_id = "base_link";
-    encoder_msg.left_wheel = left_v;
-    encoder_msg.right_wheel = right_v;
+    encoder_msg.encoders.left_wheel = left_v;
+    encoder_msg.encoders.right_wheel = right_v;
     
     encoder_pub.publish(encoder_msg);
     
@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
     odom_pub = n.advertise<nav_msgs::Odometry>("odom", 5);
     
     // Encoder Publisher
-    encoder_pub = n.advertise<ax2550::Encoders>("encoders", 5);
+    encoder_pub = n.advertise<ax2550::StampedEncoders>("encoders", 5);
     
     // TF Broadcaster
     odom_broadcaster = new tf::TransformBroadcaster;
