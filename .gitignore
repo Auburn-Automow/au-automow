@@ -9,3 +9,5 @@ CMakeCache.txt
 *.bag
 *.a
 *.so
+msg_gen
+srv_gen
