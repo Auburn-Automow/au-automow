@@ -74,6 +74,7 @@ void encoderCallback(const ros::TimerEvent& e) {
         return;
     
     AX2550_ENCODER ax2550_encoder(0,0);
+    ros::Time now = ros::Time::now();
     // Retreive the data
     try {
         ax2550_encoder = mc->readEncoders();
@@ -86,8 +87,6 @@ void encoderCallback(const ros::TimerEvent& e) {
         }
         return;
     }
-    // Grab the time
-    ros::Time now = ros::Time::now();
     
     double delta_time = (now - prev_time).toSec();
     prev_time = now;
@@ -102,6 +101,8 @@ void encoderCallback(const ros::TimerEvent& e) {
     
     ax2550::Encoders encoder_msg;
     
+    encoder_msg.header.stamp = now;
+    encoder_msg.header.frame_id = "base_link";
     encoder_msg.left_wheel = left_v;
     encoder_msg.right_wheel = right_v;
     
