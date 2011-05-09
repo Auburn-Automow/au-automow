@@ -11,3 +11,4 @@ CMakeCache.txt
 *.so
 msg_gen
 srv_gen
+ROS_NOBUILD

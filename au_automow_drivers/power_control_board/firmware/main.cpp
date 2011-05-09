@@ -40,7 +40,6 @@ Metro ledMetro = Metro(500);
 Metro msgMetro = Metro(250);
 
 char batteryState = 0;
-#define BS_DISCONNECT 0
 #define BS_CHARGING 1
 #define BS_DISCHARGING 2
 #define BS_CRITICAL 3
@@ -48,10 +47,16 @@ char batteryState = 0;
 char stateOfCharge;
 
 bool ledState = LOW;
-int voltaverage;
 bool cutterLeftState;
 bool cutterRightState;
 
+/**
+ *  Function required for the avr_bridge code to work.  A simple put character
+ *  command in the ros namespace.
+ *
+ *  For the purpose of this code, we are using the Arduino's built-in serial
+ *  library, hence the Serial.write.
+ */
 namespace ros {
     int fputc(char c, FILE *f) {
         Serial.write(c); 
@@ -59,6 +64,18 @@ namespace ros {
     }
 }
 
+/**
+ * Callback from the ROS avr_bridge subscription to the CutterControl message.
+ *
+ * Sets the state to the state included in the CutterControl message, and turns
+ * the cutters on and off accordingly
+ *
+ * @param *msg
+ *      The incoming message from the avr_bridge node.
+ *
+ *  @return
+ *      Nothing
+ */
 void cuttercallback(ros::Msg const *msg)
 {
     digitalWrite(pin_leftCutterControl,cc_msg.LeftControl);
@@ -69,53 +86,10 @@ void cuttercallback(ros::Msg const *msg)
 
 void updateBatteryDisplay(void)
 {
-    if (ledState == LOW)
-    { 
-        ledState = HIGH;
-    } else { 
-        ledState = LOW;
-    }
-    switch(batteryState)
-    {
-        case BS_DISCONNECT:
-            digitalWrite(pin_ledMid,LOW);
-            digitalWrite(pin_ledHigh,LOW);
-            digitalWrite(pin_ledLow,LOW);
-            break;
-        case BS_CHARGING:
-            digitalWrite(pin_ledLow,LOW);
-            digitalWrite(pin_ledMid,LOW);
-            digitalWrite(pin_ledHigh,ledState);
-            break;
-        case BS_DISCHARGING:
-            if(pcb_msg.StateofCharge > 80) {
-                digitalWrite(pin_ledHigh,HIGH);
-                digitalWrite(pin_ledMid, LOW);
-                digitalWrite(pin_ledLow, LOW);
-            } else if (pcb_msg.StateofCharge > 65) {
-                digitalWrite(pin_ledHigh,HIGH);
-                digitalWrite(pin_ledMid,HIGH);
-                digitalWrite(pin_ledLow,LOW);
-            } else if (pcb_msg.StateofCharge > 50) {
-                digitalWrite(pin_ledHigh,LOW);
-                digitalWrite(pin_ledMid,HIGH);
-                digitalWrite(pin_ledLow,LOW);
-            } else if (pcb_msg.StateofCharge > 35) {
-                digitalWrite(pin_ledHigh,LOW);
-                digitalWrite(pin_ledMid,HIGH);
-                digitalWrite(pin_ledLow,HIGH);
-            } else {
-                digitalWrite(pin_ledHigh,LOW);
-                digitalWrite(pin_ledMid,LOW);
-                digitalWrite(pin_ledLow,HIGH);
-            }
-            break;
-        case BS_CRITICAL:
-            digitalWrite(pin_ledMid,LOW);
-            digitalWrite(pin_ledHigh,LOW);
-            digitalWrite(pin_ledLow,ledState);
-            break;
-    }
+    ledState = HIGH;
+    digitalWrite(pin_ledHigh,ledState);
+    digitalWrite(pin_ledMid,ledState);
+    digitalWrite(pin_ledLow,ledState);
 }
 
 void setup()
@@ -169,27 +143,12 @@ void loop()
             break;
         node.spin(c);
     }
-    
-    float ADCVolts = analogRead(pin_voltage);
-    float ADCAmps = 504-analogRead(pin_current);
-    
-    int volts = ((ADCVolts/33.57)-23.0)*50.0;
-    voltaverage = (8*voltaverage + 2*volts)/10;
-    if(volts < 0)
-    {
-        batteryState = BS_DISCONNECT;
-        pcb_msg.StateofCharge = 0;
-    } else if(volts > 100) {
-        batteryState = BS_CHARGING;
-        pcb_msg.StateofCharge = 100;
-    } else if(volts < 20){
-        batteryState = BS_CRITICAL;
-        pcb_msg.StateofCharge = volts;
-    } else {
-        batteryState = BS_DISCHARGING;
-        pcb_msg.StateofCharge = volts;
-    }
-    
+   
+    // These were derived from measurements.  Probably could be more accurate.
+    float ADCVolts = 0.030024*analogRead(pin_voltage) + 0.027057;
+    float ADCAmps = 0.32927 * analogRead(pin_current) - 165.12;
+   
+
     pcb_msg.LeftCutterStatus = (digitalRead(pin_leftCutterCheck) ? FALSE : TRUE);
     pcb_msg.RightCutterStatus = (digitalRead(pin_rightCutterCheck) ? FALSE : TRUE);
 
@@ -214,8 +173,8 @@ void loop()
 
     if (msgMetro.check() == 1)
     {
-        pcb_msg.Voltage = ADCVolts/33.57;
-        pcb_msg.Current = ADCAmps/3.15;
+        pcb_msg.Voltage = ADCVolts;
+        pcb_msg.Current = ADCAmps;
         pcb_msg.Temperature1 = temperatureTop.getTempCByIndex(0);
         pcb_msg.Temperature2 = temperatureBot.getTempCByIndex(0);
         temperatureTop.requestTemperatures();
