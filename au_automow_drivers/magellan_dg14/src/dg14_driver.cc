@@ -146,7 +146,7 @@ class Gps {
         
         void publish_callback(const ros::TimerEvent& e) {
             gps_fix_pub.publish(fix); // Its a new pos.
-
+            navsat_fix_pub.publish(nav_fix);
         }
     private:
         
@@ -229,7 +229,7 @@ class Gps {
             nav_fix.latitude = fix.latitude;
             fix.longitude = strtod(tokens[7].c_str(), NULL);
             nav_fix.longitude = fix.longitude;
-            fix.altitude = stdtod(tokens[9].c_str(), NULL);
+            fix.altitude = strtod(tokens[9].c_str(), NULL);
             nav_fix.altitude = fix.altitude;
             if (tokens[6] == "S") // If southern hemisphere, it needs to be negative
                 fix.latitude *= -1;
@@ -311,7 +311,7 @@ class Gps {
         ros::Timer      gps_timer;
         GPSStatus       status;
         GPSFix          fix;
-        ros::NavStatFix nav_fix;
+        NavSatFix nav_fix;
         bool            testing;
         double          utc_time;
 };
