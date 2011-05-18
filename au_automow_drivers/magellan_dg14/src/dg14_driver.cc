@@ -58,7 +58,7 @@ class Gps {
             
             gps_fix_pub = node.advertise<GPSFix>("extended_fix", 1);
             utm_fix_pub = node.advertise<magellan_dg14::UTMFix>("utm_fix", 1);
-            navsat_fix_pub = node.advertise<NavSatFix>("fix", 1);
+            navsat_fix_pub = node.advertise<NavSatFix>("/gps/fix", 1);
             gps_timer = node.createTimer(ros::Duration(1.0/10.0), &Gps::publish_callback, this);
             return true;
         }
@@ -114,6 +114,7 @@ class Gps {
             
             status.header.stamp = time;
             fix.header.stamp = time;
+            nav_fix.header.stamp = time;
             
             if (tokens[0] == "$PASHR" && 
                 tokens[1] == "POS") {
