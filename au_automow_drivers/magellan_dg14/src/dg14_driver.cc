@@ -146,6 +146,7 @@ class Gps {
         
         void publish_callback(const ros::TimerEvent& e) {
             gps_fix_pub.publish(fix); // Its a new pos.
+            navsat_fix_pub.publish(nav_fix);
         }
     private:
         
@@ -205,9 +206,11 @@ class Gps {
             int mode = atoi(tokens[2].c_str());
             if (mode == 0) {
                 status.status = 0;
+                nav_fix.status.status = NavSatStatus::STATUS_FIX;
             }
             else if (mode == 1) {
                 status.status = 1;
+                nav_fix.status.status = NavSatStatus::STATUS_GBAS_FIX;
             }
             else if (mode == 2) {
                 status.status = 2;
@@ -218,11 +221,16 @@ class Gps {
             else {
                 status.status = -1;
             }
+            nav_fix.status.service = NavSatStatus::SERVICE_GPS;
             
             utc_time = strtod(tokens[4].c_str(), NULL);
             
             fix.latitude = strtod(tokens[5].c_str(), NULL);
+            nav_fix.latitude = fix.latitude;
             fix.longitude = strtod(tokens[7].c_str(), NULL);
+            nav_fix.longitude = fix.longitude;
+            fix.altitude = strtod(tokens[9].c_str(), NULL);
+            nav_fix.altitude = fix.altitude;
             if (tokens[6] == "S") // If southern hemisphere, it needs to be negative
                 fix.latitude *= -1;
             if (tokens[8] == "W") // If West of Prime meridian, it needs to be negative
@@ -256,6 +264,10 @@ class Gps {
             fix.position_covariance[8] = strtod(tokens[8].c_str(), NULL);
             fix.position_covariance_type = NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN;
             utc_time = strtod(tokens[1].c_str(), NULL);
+            nav_fix.position_covariance[0] = fix.position_covariance[0];
+            nav_fix.position_covariance[4] = fix.position_covariance[4];
+            nav_fix.position_covariance[8] = fix.position_covariance[8];
+            nav_fix.position_covariance_type = NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN;
         }
 
         void process_data_sat(vector<string> &tokens) {
@@ -299,6 +311,7 @@ class Gps {
         ros::Timer      gps_timer;
         GPSStatus       status;
         GPSFix          fix;
+        NavSatFix nav_fix;
         bool            testing;
         double          utc_time;
 };
