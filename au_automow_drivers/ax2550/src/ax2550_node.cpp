@@ -142,8 +142,8 @@ void encoderCallback(const ros::TimerEvent& e) {
     odom_msg.pose.pose.position.x = prev_x;
     odom_msg.pose.pose.position.y = prev_y;
     odom_msg.pose.pose.orientation = quat;
-    odom_msg.pose.covariance[0] = 1e-5;
-    odom_msg.pose.covariance[7] = 1e-5;
+    odom_msg.pose.covariance[0] = 1e-3;
+    odom_msg.pose.covariance[7] = 1e-3;
     odom_msg.pose.covariance[14] = 1e100;
     odom_msg.pose.covariance[21] = 1e100;
     odom_msg.pose.covariance[28] = 1e100;
