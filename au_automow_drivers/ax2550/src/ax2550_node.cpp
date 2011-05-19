@@ -22,6 +22,9 @@ double wheel_diameter = 0.0;
 double encoder_poll_rate;
 std::string odom_frame_id;
 
+double rot_cov = 0.0;
+double pos_cov = 0.0;
+
 static double A_MAX = 20.0;
 static double B_MAX = 20.0;
 
@@ -152,12 +155,12 @@ void encoderCallback(const ros::TimerEvent& e) {
     odom_msg.pose.pose.position.x = prev_x;
     odom_msg.pose.pose.position.y = prev_y;
     odom_msg.pose.pose.orientation = quat;
-    odom_msg.pose.covariance[0] = 1;
-    odom_msg.pose.covariance[7] = 1;
+    odom_msg.pose.covariance[0] = pos_cov;
+    odom_msg.pose.covariance[7] = pos_cov;
     odom_msg.pose.covariance[14] = 1e100;
     odom_msg.pose.covariance[21] = 1e100;
     odom_msg.pose.covariance[28] = 1e100;
-    odom_msg.pose.covariance[35] = 1;
+    odom_msg.pose.covariance[35] = rot_cov;
     
     odom_msg.twist.twist.linear.x = v/delta_time;
     odom_msg.twist.twist.angular.z = w/delta_time;
@@ -198,6 +201,10 @@ int main(int argc, char **argv) {
     
     // Odom Frame id parameter
     n.param("odom_frame_id", odom_frame_id, std::string("odom"));
+
+    // Load up some covariances from parameters
+    n.param("rotation_covariance",rot_cov, 1.0);
+    n.param("position_covariance",pos_cov, 1.0);
     
     // Setup Encoder polling
     n.param("encoder_poll_rate", encoder_poll_rate, 25.0);
