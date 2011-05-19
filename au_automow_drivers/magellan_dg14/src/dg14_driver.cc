@@ -18,10 +18,12 @@
 #include <gps_common/GPSStatus.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/NavSatStatus.h>
+#include <nav_msgs/Odometry.h>
 #include <magellan_dg14/UTMFix.h>
 
 using namespace gps_common;
 using namespace sensor_msgs;
+using namespace nav_msgs;
 using namespace std;
 namespace po = boost::program_options;
 
@@ -59,7 +61,8 @@ class Gps {
             gps_fix_pub = node.advertise<GPSFix>("extended_fix", 1);
             utm_fix_pub = node.advertise<magellan_dg14::UTMFix>("utm_fix", 1);
             navsat_fix_pub = node.advertise<NavSatFix>("/gps/fix", 1);
-            gps_timer = node.createTimer(ros::Duration(1.0/10.0), &Gps::publish_callback, this);
+            gps_odom_pub = node.advertise<Odometry>("/gps/odometry",1);
+            gps_timer = node.createTimer(ros::Duration(1.0/5.0), &Gps::publish_callback, this);
             return true;
         }
         
@@ -193,6 +196,39 @@ class Gps {
             utm_fix.differential_station_id = tokens[14];
             utm_fix.position_covariance = fix.position_covariance;
             utm_fix_pub.publish(utm_fix);
+
+            gps_odom.header.stamp = utm_fix.header.stamp;
+            gps_odom.header.frame_id = "base_footprint";
+            gps_odom.pose.pose.position.x = utm_fix.easting;
+            gps_odom.pose.pose.position.y = utm_fix.northing;
+            gps_odom.pose.pose.position.z = 0;
+            gps_odom.pose.pose.orientation.x = 1;
+            gps_odom.pose.pose.orientation.y = 0;
+            gps_odom.pose.pose.orientation.z = 0;
+            gps_odom.pose.pose.orientation.w = 0;
+            
+            // Use ENU covariance to build XYZRPY covariance
+            boost::array<double, 36> covariance = {{
+              utm_fix.position_covariance[0],
+              utm_fix.position_covariance[1],
+              utm_fix.position_covariance[2],
+              0, 0, 0,
+              utm_fix.position_covariance[3],
+              utm_fix.position_covariance[4],
+              utm_fix.position_covariance[5],
+              0, 0, 0,
+              utm_fix.position_covariance[6],
+              utm_fix.position_covariance[7],
+              utm_fix.position_covariance[8],
+              0, 0, 0,
+              0, 0, 0, 99999, 0, 0,
+              0, 0, 0, 0, 99999, 0,
+              0, 0, 0, 0, 0, 99999 
+            }};
+
+            gps_odom.pose.covariance = covariance;
+
+            gps_odom_pub.publish(gps_odom);
         }
         
         void process_data_pos(vector<string> &tokens) {
@@ -308,11 +344,13 @@ class Gps {
         ros::Publisher  gps_fix_pub;
         ros::Publisher  utm_fix_pub;
         ros::Publisher  navsat_fix_pub;
+        ros::Publisher  gps_odom_pub;
         serial::Serial  s_;
         ros::Timer      gps_timer;
         GPSStatus       status;
         GPSFix          fix;
-        NavSatFix nav_fix;
+        NavSatFix       nav_fix;
+        Odometry        gps_odom;
         bool            testing;
         double          utc_time;
 };
