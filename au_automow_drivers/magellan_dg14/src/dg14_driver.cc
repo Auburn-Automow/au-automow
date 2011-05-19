@@ -44,10 +44,6 @@ trim_trailing(string str) {
     return str;
 }
 
-void callback_test(GpsConfig, uint32_t) {
-    cout << "hi" << endl;
-}
-
 class Gps {
     public:
         double          easting_origin;
@@ -63,7 +59,6 @@ class Gps {
 
         bool Init(string port, int baud = 115200) {
             /* TODO: Make sure the serial port opened properly */
-            cout << "Hi?" << endl;
             s_.setPort(port);
             s_.setBaudrate(baud);
             s_.setTimeoutMilliseconds(250);
@@ -77,9 +72,8 @@ class Gps {
             gps_odom_pub = node.advertise<Odometry>("/gps/odometry",1);
             gps_timer = node.createTimer(ros::Duration(1.0/5.0), &Gps::publish_callback, this);
             
-            //f = boost::bind(&Gps::update_params_callback, boost::ref(this), _1, _2);
-            cout << "Setting up te bind" << endl;
-            f = boost::bind(&callback_test, _1, _2);
+            f = boost::bind(&Gps::update_params_callback, boost::ref(this), _1, _2);
+            //f = boost::bind(&callback_test, _1, _2);
             srv.setCallback(f);
             
             ROS_DEBUG("Finidished Init");
@@ -176,7 +170,7 @@ class Gps {
         void update_params_callback(GpsConfig &config, uint32_t level) {
             northing_origin = config.northing_origin;
             easting_origin  = config.easting_origin;
-            ROS_DEBUG("Update Called");
+            ROS_DEBUG("Update Params Called");
         }
         
     private:
@@ -403,7 +397,6 @@ int main (int argc, char *argv[]) {
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
     
-    cout << "Herp Derp" << endl;
     if (vm.count("help")) {
         cout << desc << "\n";
         return 1;
