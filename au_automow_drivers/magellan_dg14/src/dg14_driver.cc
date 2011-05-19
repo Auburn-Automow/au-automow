@@ -43,7 +43,12 @@ trim_trailing(string str) {
 
 class Gps {
     public:
+        double          easting_origin;
+        double          northing_origin;
+        
         explicit Gps() {
+            easting_origin = 641730;
+            northing_origin = 3606766;
         }
 
         // explicit Gps(string port, int buad = 115200) {
@@ -57,7 +62,7 @@ class Gps {
             s_.open();
             utc_time = 0.0;
             testing = false;
-            
+
             gps_fix_pub = node.advertise<GPSFix>("extended_fix", 1);
             utm_fix_pub = node.advertise<magellan_dg14::UTMFix>("utm_fix", 1);
             navsat_fix_pub = node.advertise<NavSatFix>("/gps/fix", 1);
@@ -199,8 +204,8 @@ class Gps {
 
             gps_odom.header.stamp = utm_fix.header.stamp;
             gps_odom.header.frame_id = "base_footprint";
-            gps_odom.pose.pose.position.x = utm_fix.easting;
-            gps_odom.pose.pose.position.y = utm_fix.northing;
+            gps_odom.pose.pose.position.x = utm_fix.easting - easting_origin;
+            gps_odom.pose.pose.position.y = utm_fix.northing - northing_origin;
             gps_odom.pose.pose.position.z = 0;
             gps_odom.pose.pose.orientation.x = 1;
             gps_odom.pose.pose.orientation.y = 0;
@@ -399,7 +404,13 @@ int main (int argc, char *argv[]) {
         if (ros::param::has("baud")) {
             ros::param::get("baud", baud);
         }
-        
+        if (ros::param::has("northing_origin")) {
+            ros::param::get("northing_origin",gps.northing_origin);
+        }
+         if (ros::param::has("easting_origin")) {
+            ros::param::get("easting_origin",gps.easting_origin);
+        }
+
         gps.Init(src, baud);
         // gps_timer.start();
         while (ros::ok()) {
