@@ -35,6 +35,10 @@ rosbuild_genmsg()
 #rosbuild_add_executable(example examples/example.cpp)
 #target_link_libraries(example ${PROJECT_NAME})
 
+rosbuild_find_ros_package(dynamic_reconfigure)
+include(${dynamic_reconfigure_PACKAGE_PATH}/cmake/cfgbuild.cmake)
+gencfg()
+
 rosbuild_add_boost_directories()
 rosbuild_add_executable(dg14_driver src/dg14_driver.cc)
 rosbuild_link_boost(dg14_driver program_options thread system)
