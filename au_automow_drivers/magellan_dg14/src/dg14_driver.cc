@@ -20,12 +20,14 @@
 #include <sensor_msgs/NavSatStatus.h>
 #include <nav_msgs/Odometry.h>
 #include <dynamic_reconfigure/server.h>
+#include "magellan_dg14/GpsConfig.h"
 #include <magellan_dg14/UTMFix.h>
 
 using namespace gps_common;
 using namespace sensor_msgs;
 using namespace nav_msgs;
 using namespace std;
+using namespace magellan_dg14;
 namespace po = boost::program_options;
 
 string
@@ -42,17 +44,16 @@ trim_trailing(string str) {
     return str;
 }
 
-typedef struct {
-    double northing_origin;
-    double easting_origin;
-} GpsConfig;
+void callback_test(GpsConfig, uint32_t) {
+    cout << "hi" << endl;
+}
 
 class Gps {
     public:
         double          easting_origin;
         double          northing_origin;
         
-        explicit Gps() {
+        explicit Gps() : node("~"), srv(node) {
             easting_origin = 641730;
             northing_origin = 3606766;
         }
@@ -62,6 +63,7 @@ class Gps {
 
         bool Init(string port, int baud = 115200) {
             /* TODO: Make sure the serial port opened properly */
+            cout << "Hi?" << endl;
             s_.setPort(port);
             s_.setBaudrate(baud);
             s_.setTimeoutMilliseconds(250);
@@ -75,10 +77,13 @@ class Gps {
             gps_odom_pub = node.advertise<Odometry>("/gps/odometry",1);
             gps_timer = node.createTimer(ros::Duration(1.0/5.0), &Gps::publish_callback, this);
             
-            dynamic_reconfigure::Server<GpsConfig> srv;
-            dynamic_reconfigure::Server<GpsConfig>::CallbackType f = boost::bind(&dynamicReconfigureCallback, _1, _2);
+            //f = boost::bind(&Gps::update_params_callback, boost::ref(this), _1, _2);
+            cout << "Setting up te bind" << endl;
+            f = boost::bind(&callback_test, _1, _2);
             srv.setCallback(f);
             
+            ROS_DEBUG("Finidished Init");
+
             return true;
         }
         
@@ -151,8 +156,7 @@ class Gps {
                 process_data_gst(tokens);
             }
             else {
-                cout << "Shouldn't happen" << endl;
-                cout << tokens[0] << ":" << tokens[1] << endl;
+                //ROS_WARN("Received an incompatable or incomplete message: %s %s", tokens[0], tokens[1]);
             }
             
             fix.status = status;
@@ -172,6 +176,7 @@ class Gps {
         void update_params_callback(GpsConfig &config, uint32_t level) {
             northing_origin = config.northing_origin;
             easting_origin  = config.easting_origin;
+            ROS_DEBUG("Update Called");
         }
         
     private:
@@ -375,6 +380,8 @@ class Gps {
         Odometry        gps_odom;
         bool            testing;
         double          utc_time;
+        dynamic_reconfigure::Server<GpsConfig> srv;
+        dynamic_reconfigure::Server<GpsConfig>::CallbackType f;
 };
 
 int main (int argc, char *argv[]) {
@@ -396,6 +403,7 @@ int main (int argc, char *argv[]) {
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
     
+    cout << "Herp Derp" << endl;
     if (vm.count("help")) {
         cout << desc << "\n";
         return 1;
@@ -420,12 +428,6 @@ int main (int argc, char *argv[]) {
 
         if (ros::param::has("baud")) {
             ros::param::get("baud", baud);
-        }
-        if (ros::param::has("northing_origin")) {
-            ros::param::get("northing_origin",gps.northing_origin);
-        }
-         if (ros::param::has("easting_origin")) {
-            ros::param::get("easting_origin",gps.easting_origin);
         }
 
         gps.Init(src, baud);
