@@ -19,6 +19,7 @@
 #include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/NavSatStatus.h>
 #include <nav_msgs/Odometry.h>
+#include <dynamic_reconfigure/server.h>
 #include <magellan_dg14/UTMFix.h>
 
 using namespace gps_common;
@@ -40,6 +41,11 @@ trim_trailing(string str) {
         
     return str;
 }
+
+typedef struct {
+    double northing_origin;
+    double easting_origin;
+} GpsConfig;
 
 class Gps {
     public:
@@ -68,6 +74,11 @@ class Gps {
             navsat_fix_pub = node.advertise<NavSatFix>("/gps/fix", 1);
             gps_odom_pub = node.advertise<Odometry>("/gps/odometry",1);
             gps_timer = node.createTimer(ros::Duration(1.0/5.0), &Gps::publish_callback, this);
+            
+            dynamic_reconfigure::Server<GpsConfig> srv;
+            dynamic_reconfigure::Server<GpsConfig>::CallbackType f = boost::bind(&dynamicReconfigureCallback, _1, _2);
+            srv.setCallback(f);
+            
             return true;
         }
         
@@ -75,11 +86,11 @@ class Gps {
             testing = true;
             return testing;
         }
-
+        
         void Stop() {
             s_.close();
         }
-
+        
         void Cancel() {
             Stop();
         }
@@ -157,6 +168,12 @@ class Gps {
             gps_fix_pub.publish(fix); // Its a new pos.
             navsat_fix_pub.publish(nav_fix);
         }
+        
+        void update_params_callback(GpsConfig &config, uint32_t level) {
+            northing_origin = config.northing_origin;
+            easting_origin  = config.easting_origin;
+        }
+        
     private:
         
         void process_data_utm(vector<string> &tokens) {
