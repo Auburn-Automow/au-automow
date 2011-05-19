@@ -1,14 +1,11 @@
 #!/usr/bin/env python
 import roslib; roslib.load_manifest('microstrain_3dm_gx3')
 import rospy
-import sys
 from sensor_msgs.msg import Imu
-from geometry_msgs.msg import Vector3, Quaternion, PoseStamped, Point
 import tf
 import math
 
-global euler_pub, imu_repub 
-euler_pub = None
+global imu_repub 
 imu_repub = None 
 
 def wrapToPi(angle):
@@ -21,7 +18,6 @@ def wrapToPi(angle):
     return angle
 
 def imuDataReceived(data):
-    global euler_pub 
     global imu_repub
 
     angles = tf.transformations.euler_from_quaternion(
@@ -38,27 +34,14 @@ def imuDataReceived(data):
     imu_msg.orientation.y = orientation[1]
     imu_msg.orientation.z = orientation[2]
     imu_msg.orientation.w = orientation[3]
-
     imu_msg.header = data.header
     imu_msg.orientation_covariance = data.orientation_covariance
     imu_msg.angular_velocity = data.angular_velocity
-    imu_msg.linear_acceleration = data.linear_acceleration
-
     imu_repub.publish(imu_msg)
 
 
-    msg = Vector3()
-    msg.x = angles[0]
-    msg.y = angles[1]
-    msg.z = angles[2]
-    euler_pub.publish(msg)
-
 if __name__=='__main__':
-    rospy.init_node('imu_eulerizer', anonymous=True)
+    rospy.init_node('imu_republisher', anonymous=True)
     rospy.Subscriber('/imu/data',Imu,imuDataReceived)
-
-    euler_pub = rospy.Publisher('/imu/euler',Vector3)
     imu_repub = rospy.Publisher('/imu/remapped',Imu)
-
-
     rospy.spin()
