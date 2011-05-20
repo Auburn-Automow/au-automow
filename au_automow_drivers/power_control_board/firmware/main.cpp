@@ -86,10 +86,46 @@ void cuttercallback(ros::Msg const *msg)
 
 void updateBatteryDisplay(void)
 {
-    ledState = HIGH;
-    digitalWrite(pin_ledHigh,ledState);
-    digitalWrite(pin_ledMid,ledState);
-    digitalWrite(pin_ledLow,ledState);
+    if(ledState == HIGH)
+        ledState = LOW;
+    else
+        ledState = HIGH;
+   
+    switch(batteryState)
+    {
+    case BS_CHARGING:
+        digitalWrite(pin_ledHigh,ledState);
+        digitalWrite(pin_ledMid,LOW);
+        digitalWrite(pin_ledLow,LOW);
+        break;
+    case BS_CRITICAL:
+        digitalWrite(pin_ledHigh,LOW);
+        digitalWrite(pin_ledMid,LOW);
+        digitalWrite(pin_ledLow,ledState);
+        break;
+    default:
+        unsigned char temp = stateOfCharge/20;
+        bool a,b,c;
+        switch(temp){
+            case 5:
+               a=1;b=0;c=0;
+               break;
+            case 4:
+               a=1;b=0;c=0;
+               break;
+            case 3:
+               a=1;b=1;c=0;
+               break;
+            case 2:
+               a=0;b=1;c=0;
+               break;
+            case 1:
+               a=0;b=1;c=1;
+               break;
+        }
+        digitalWrite(pin_ledHigh,a);
+        digitalWrite(pin_ledMid,b);
+    }
 }
 
 void setup()
@@ -147,7 +183,22 @@ void loop()
     // These were derived from measurements.  Probably could be more accurate.
     float ADCVolts = 0.030024*analogRead(pin_voltage) + 0.027057;
     float ADCAmps = 0.32927 * analogRead(pin_current) - 165.12;
-   
+  
+    if(ADCVolts > 25.5)
+    {
+        batteryState = BS_CHARGING;
+        stateOfCharge = 100; 
+    }   
+    else if(ADCVolts < 23)
+    {
+        batteryState = BS_CRITICAL;
+        stateOfCharge = (char)(ADCVolts  * 40 - 900); 
+    }
+    else
+    {
+        batteryState = BS_DISCHARGING;
+        stateOfCharge = (char)(ADCVolts * 40 - 900); 
+    }
 
     pcb_msg.LeftCutterStatus = (digitalRead(pin_leftCutterCheck) ? FALSE : TRUE);
     pcb_msg.RightCutterStatus = (digitalRead(pin_rightCutterCheck) ? FALSE : TRUE);
@@ -175,6 +226,7 @@ void loop()
     {
         pcb_msg.Voltage = ADCVolts;
         pcb_msg.Current = ADCAmps;
+        pcb_msg.StateofCharge = stateOfCharge;
         pcb_msg.Temperature1 = temperatureTop.getTempCByIndex(0);
         pcb_msg.Temperature2 = temperatureBot.getTempCByIndex(0);
         temperatureTop.requestTemperatures();
