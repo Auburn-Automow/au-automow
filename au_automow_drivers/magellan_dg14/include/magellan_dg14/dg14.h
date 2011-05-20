@@ -8,6 +8,7 @@
 #include <gps_common/GPSStatus.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/NavSatStatus.h>
+#include <nav_msgs/Odometry.h>
 
 #define CMD_TERMINATOR "\r\n"
 

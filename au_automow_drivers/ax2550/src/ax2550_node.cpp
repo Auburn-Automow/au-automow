@@ -22,12 +22,26 @@ double wheel_diameter = 0.0;
 double encoder_poll_rate;
 std::string odom_frame_id;
 
+double rot_cov = 0.0;
+double pos_cov = 0.0;
+
 static double A_MAX = 20.0;
 static double B_MAX = 20.0;
 
 // Persistent variables
 double prev_x = 0, prev_y = 0, prev_w = 0;
 ros::Time prev_time;
+
+double wrapToPi(double angle) {
+    angle += M_PI;
+    bool is_neg = (angle < 0);
+    angle = fmod(angle, (2.0*M_PI));
+    if (is_neg) {
+        angle += (2.0*M_PI);
+    }
+    angle -= M_PI;
+    return angle;
+}
 
 void cmd_velCallback(const geometry_msgs::Twist::ConstPtr& msg) {
     if(mc == NULL || !mc->isConnected())
@@ -111,25 +125,24 @@ void encoderCallback(const ros::TimerEvent& e) {
     double v = 0.0;
     double w = 0.0;
     
-    left_v = ax2550_encoder.encoder1 * wheel_diameter / ENCODER_RESOLUTION;
-    right_v = ax2550_encoder.encoder2 * wheel_diameter / ENCODER_RESOLUTION;
+    double r_L = wheel_diameter/2.0;
+    double r_R = wheel_diameter/2.0;
     
-    // Do inverse kinematics
-    if(left_v == right_v) {
-        v = left_v;
-        w = 0.0;
-    } else if(left_v == -1*right_v) {
-        v = 0.0;
-        w = (2.0/wheel_base_length) * left_v;
-    } else {
-        v = (left_v+right_v)/2.0;
-        w = 2.0*(right_v-left_v)/wheel_base_length;
-    }
+    v += r_L/2.0 * left_v;
+    v += r_R/2.0 * right_v;
+
+    w += r_R/wheel_base_length * right_v;
+    w -= r_L/wheel_base_length * left_v;
+
     
-    // Accumulate
-    prev_w += w;
-    prev_x += v * cos(prev_w);
-    prev_y += v * sin(prev_w);
+    // Update the states based on model and input
+    prev_x += delta_time * v
+                          * cos(prev_w + delta_time * (w/2.0));
+    
+    prev_y += delta_time * v
+                          * sin(prev_w + delta_time * (w/2.0));
+    prev_w += delta_time * w;
+    prev_w = wrapToPi(prev_w);
     
     // ROS_INFO("%f", prev_w);
     
@@ -142,12 +155,12 @@ void encoderCallback(const ros::TimerEvent& e) {
     odom_msg.pose.pose.position.x = prev_x;
     odom_msg.pose.pose.position.y = prev_y;
     odom_msg.pose.pose.orientation = quat;
-    odom_msg.pose.covariance[0] = 1e-5;
-    odom_msg.pose.covariance[7] = 1e-5;
+    odom_msg.pose.covariance[0] = pos_cov;
+    odom_msg.pose.covariance[7] = pos_cov;
     odom_msg.pose.covariance[14] = 1e100;
     odom_msg.pose.covariance[21] = 1e100;
     odom_msg.pose.covariance[28] = 1e100;
-    odom_msg.pose.covariance[35] = 1e-3;
+    odom_msg.pose.covariance[35] = rot_cov;
     
     odom_msg.twist.twist.linear.x = v/delta_time;
     odom_msg.twist.twist.angular.z = w/delta_time;
@@ -188,6 +201,10 @@ int main(int argc, char **argv) {
     
     // Odom Frame id parameter
     n.param("odom_frame_id", odom_frame_id, std::string("odom"));
+
+    // Load up some covariances from parameters
+    n.param("rotation_covariance",rot_cov, 1.0);
+    n.param("position_covariance",pos_cov, 1.0);
     
     // Setup Encoder polling
     n.param("encoder_poll_rate", encoder_poll_rate, 25.0);

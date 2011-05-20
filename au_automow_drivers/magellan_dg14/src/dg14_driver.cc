@@ -18,11 +18,16 @@
 #include <gps_common/GPSStatus.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/NavSatStatus.h>
+#include <nav_msgs/Odometry.h>
+#include <dynamic_reconfigure/server.h>
+#include "magellan_dg14/GpsConfig.h"
 #include <magellan_dg14/UTMFix.h>
 
 using namespace gps_common;
 using namespace sensor_msgs;
+using namespace nav_msgs;
 using namespace std;
+using namespace magellan_dg14;
 namespace po = boost::program_options;
 
 string
@@ -41,7 +46,12 @@ trim_trailing(string str) {
 
 class Gps {
     public:
-        explicit Gps() {
+        double          easting_origin;
+        double          northing_origin;
+        
+        explicit Gps() : node("~"), srv(node) {
+            easting_origin = 641730;
+            northing_origin = 3606766;
         }
 
         // explicit Gps(string port, int buad = 115200) {
@@ -55,11 +65,19 @@ class Gps {
             s_.open();
             utc_time = 0.0;
             testing = false;
-            
+
             gps_fix_pub = node.advertise<GPSFix>("extended_fix", 1);
             utm_fix_pub = node.advertise<magellan_dg14::UTMFix>("utm_fix", 1);
-            navsat_fix_pub = node.advertise<NavSatFix>("fix", 1);
-            gps_timer = node.createTimer(ros::Duration(1.0/10.0), &Gps::publish_callback, this);
+            navsat_fix_pub = node.advertise<NavSatFix>("/gps/fix", 1);
+            gps_odom_pub = node.advertise<Odometry>("/gps/odometry",1);
+            gps_timer = node.createTimer(ros::Duration(1.0/5.0), &Gps::publish_callback, this);
+            
+            f = boost::bind(&Gps::update_params_callback, boost::ref(this), _1, _2);
+            //f = boost::bind(&callback_test, _1, _2);
+            srv.setCallback(f);
+            
+            ROS_DEBUG("Finidished Init");
+
             return true;
         }
         
@@ -67,11 +85,11 @@ class Gps {
             testing = true;
             return testing;
         }
-
+        
         void Stop() {
             s_.close();
         }
-
+        
         void Cancel() {
             Stop();
         }
@@ -114,6 +132,7 @@ class Gps {
             
             status.header.stamp = time;
             fix.header.stamp = time;
+            nav_fix.header.stamp = time;
             
             if (tokens[0] == "$PASHR" && 
                 tokens[1] == "POS") {
@@ -131,8 +150,7 @@ class Gps {
                 process_data_gst(tokens);
             }
             else {
-                cout << "Shouldn't happen" << endl;
-                cout << tokens[0] << ":" << tokens[1] << endl;
+                //ROS_WARN("Received an incompatable or incomplete message: %s %s", tokens[0], tokens[1]);
             }
             
             fix.status = status;
@@ -146,7 +164,15 @@ class Gps {
         
         void publish_callback(const ros::TimerEvent& e) {
             gps_fix_pub.publish(fix); // Its a new pos.
+            navsat_fix_pub.publish(nav_fix);
         }
+        
+        void update_params_callback(GpsConfig &config, uint32_t level) {
+            northing_origin = config.northing_origin;
+            easting_origin  = config.easting_origin;
+            ROS_DEBUG("Update Params Called");
+        }
+        
     private:
         
         void process_data_utm(vector<string> &tokens) {
@@ -191,6 +217,39 @@ class Gps {
             utm_fix.differential_station_id = tokens[14];
             utm_fix.position_covariance = fix.position_covariance;
             utm_fix_pub.publish(utm_fix);
+
+            gps_odom.header.stamp = utm_fix.header.stamp;
+            gps_odom.header.frame_id = "base_footprint";
+            gps_odom.pose.pose.position.x = utm_fix.easting - easting_origin;
+            gps_odom.pose.pose.position.y = utm_fix.northing - northing_origin;
+            gps_odom.pose.pose.position.z = 0;
+            gps_odom.pose.pose.orientation.x = 1;
+            gps_odom.pose.pose.orientation.y = 0;
+            gps_odom.pose.pose.orientation.z = 0;
+            gps_odom.pose.pose.orientation.w = 0;
+            
+            // Use ENU covariance to build XYZRPY covariance
+            boost::array<double, 36> covariance = {{
+              utm_fix.position_covariance[0],
+              utm_fix.position_covariance[1],
+              utm_fix.position_covariance[2],
+              0, 0, 0,
+              utm_fix.position_covariance[3],
+              utm_fix.position_covariance[4],
+              utm_fix.position_covariance[5],
+              0, 0, 0,
+              utm_fix.position_covariance[6],
+              utm_fix.position_covariance[7],
+              utm_fix.position_covariance[8],
+              0, 0, 0,
+              0, 0, 0, 99999, 0, 0,
+              0, 0, 0, 0, 99999, 0,
+              0, 0, 0, 0, 0, 99999 
+            }};
+
+            gps_odom.pose.covariance = covariance;
+
+            gps_odom_pub.publish(gps_odom);
         }
         
         void process_data_pos(vector<string> &tokens) {
@@ -205,9 +264,11 @@ class Gps {
             int mode = atoi(tokens[2].c_str());
             if (mode == 0) {
                 status.status = 0;
+                nav_fix.status.status = NavSatStatus::STATUS_FIX;
             }
             else if (mode == 1) {
                 status.status = 1;
+                nav_fix.status.status = NavSatStatus::STATUS_GBAS_FIX;
             }
             else if (mode == 2) {
                 status.status = 2;
@@ -218,11 +279,16 @@ class Gps {
             else {
                 status.status = -1;
             }
+            nav_fix.status.service = NavSatStatus::SERVICE_GPS;
             
             utc_time = strtod(tokens[4].c_str(), NULL);
             
             fix.latitude = strtod(tokens[5].c_str(), NULL);
+            nav_fix.latitude = fix.latitude;
             fix.longitude = strtod(tokens[7].c_str(), NULL);
+            nav_fix.longitude = fix.longitude;
+            fix.altitude = strtod(tokens[9].c_str(), NULL);
+            nav_fix.altitude = fix.altitude;
             if (tokens[6] == "S") // If southern hemisphere, it needs to be negative
                 fix.latitude *= -1;
             if (tokens[8] == "W") // If West of Prime meridian, it needs to be negative
@@ -256,6 +322,10 @@ class Gps {
             fix.position_covariance[8] = strtod(tokens[8].c_str(), NULL);
             fix.position_covariance_type = NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN;
             utc_time = strtod(tokens[1].c_str(), NULL);
+            nav_fix.position_covariance[0] = fix.position_covariance[0];
+            nav_fix.position_covariance[4] = fix.position_covariance[4];
+            nav_fix.position_covariance[8] = fix.position_covariance[8];
+            nav_fix.position_covariance_type = NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN;
         }
 
         void process_data_sat(vector<string> &tokens) {
@@ -295,12 +365,17 @@ class Gps {
         ros::Publisher  gps_fix_pub;
         ros::Publisher  utm_fix_pub;
         ros::Publisher  navsat_fix_pub;
+        ros::Publisher  gps_odom_pub;
         serial::Serial  s_;
         ros::Timer      gps_timer;
         GPSStatus       status;
         GPSFix          fix;
+        NavSatFix       nav_fix;
+        Odometry        gps_odom;
         bool            testing;
         double          utc_time;
+        dynamic_reconfigure::Server<GpsConfig> srv;
+        dynamic_reconfigure::Server<GpsConfig>::CallbackType f;
 };
 
 int main (int argc, char *argv[]) {
@@ -347,7 +422,7 @@ int main (int argc, char *argv[]) {
         if (ros::param::has("baud")) {
             ros::param::get("baud", baud);
         }
-        
+
         gps.Init(src, baud);
         // gps_timer.start();
         while (ros::ok()) {
