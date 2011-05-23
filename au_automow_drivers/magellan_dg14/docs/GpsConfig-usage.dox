@@ -1,0 +1,8 @@
+\subsubsection usage Usage
+\verbatim
+<node name="dynamic_reconfigure_node" pkg="magellan_dg14" type="dynamic_reconfigure_node">
+  <param name="northing_origin" type="double" value="3606769.25" />
+  <param name="easting_origin" type="double" value="641734.05" />
+</node>
+\endverbatim
+

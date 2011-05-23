@@ -1,0 +1,7 @@
+\subsubsection parameters ROS parameters
+
+Reads and maintains the following parameters on the ROS server
+
+- \b "~northing_origin" : \b [double] Northing Origin min: -std::numeric_limits<double>::infinity(), default: 3606769.25, max: std::numeric_limits<double>::infinity()
+- \b "~easting_origin" : \b [double] Easting Origin min: -std::numeric_limits<double>::infinity(), default: 641734.05, max: std::numeric_limits<double>::infinity()
+
