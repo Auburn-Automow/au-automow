@@ -50,8 +50,8 @@ class Gps {
         double          northing_origin;
         
         explicit Gps() : node("~"), srv(node) {
-            easting_origin = 641730;
-            northing_origin = 3606766;
+            easting_origin = 641733.6623;
+            northing_origin = 3606768.27;
         }
 
         // explicit Gps(string port, int buad = 115200) {
@@ -317,9 +317,9 @@ class Gps {
         }
         
         void process_data_gst(vector<string> &tokens) {
-            fix.position_covariance[0] = strtod(tokens[6].c_str(), NULL);
-            fix.position_covariance[4] = strtod(tokens[7].c_str(), NULL);
-            fix.position_covariance[8] = strtod(tokens[8].c_str(), NULL);
+            fix.position_covariance[0] = pow(strtod(tokens[6].c_str(), NULL),2);
+            fix.position_covariance[4] = pow(strtod(tokens[7].c_str(), NULL),2);
+            fix.position_covariance[8] = pow(strtod(tokens[8].c_str(), NULL),2);
             fix.position_covariance_type = NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN;
             utc_time = strtod(tokens[1].c_str(), NULL);
             nav_fix.position_covariance[0] = fix.position_covariance[0];
