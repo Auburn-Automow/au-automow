@@ -162,8 +162,10 @@ void encoderCallback(const ros::TimerEvent& e) {
     odom_msg.pose.covariance[28] = 1e100;
     odom_msg.pose.covariance[35] = rot_cov;
     
-    odom_msg.twist.twist.linear.x = v/delta_time;
-    odom_msg.twist.twist.angular.z = w/delta_time;
+    // odom_msg.twist.twist.linear.x = v/delta_time;
+    odom_msg.twist.twist.linear.x = v;
+    // odom_msg.twist.twist.angular.z = w/delta_time;
+    odom_msg.twist.twist.angular.z = w;
     
     odom_pub.publish(odom_msg);
     
