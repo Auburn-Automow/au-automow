@@ -1,17 +1,36 @@
+; Turn off all the damn messages for now
+$PASHS,NME,ALL,A,OFF
+
+; 115200 Baud on Port A
 ; 115200 Baud on Port B
 $PASHS,SPD,A,9
 $PASHS,SPD,B,9
+; Second Order code smoothing
 $PASHS,SMI,600,2
+; Strobe Correlator
 $PASHS,CRR,S
+; 5 degree mask
 $PASHS,PEM,5
+; Generate positions even without RTK
 $PASHS,RTC,AUT,Y
+; 99% Confidence before fixing integers
 $PASHS,CPD,AFP,99
-$PASHS,CPD,MAX,60
+; 100s maximum age of corrections
+$PASHS,CPD,MAX,100
+; Turn time-tagged RTK off
 $PASHS,CPD,FST,ON
+; Remote station on port B
 $PASHS,RTC,REM,B
+; Get corrections from external port and sbas
+$PASHS,RTC,SLC,EXT,SBA
+; We are a rover
 $PASHS,CPD,MOD,ROV
+; With a fixed base
 $PASHS,CPD,BAS,0
-$PASHS,DYN,2
+; Maximum speed 2m/s
+$PASHS,DYN,3
+; Dual Acquire Mode on SBAS
+$PASHS,SBA,DAM
 
 ; John's Messages
 $PASHS,NME,GST,A,ON

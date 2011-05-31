@@ -1,39 +1,30 @@
-; Auburn Automow GPS Configuration File.  To be used with Evaluate Software.
-; Set the baud rate of Port A to 115200
 $PASHS,SPD,A,9
-; Set the baud rate of Port B to 115200
 $PASHS,SPD,B,9
-
-; Turn off messages 1 and 2 (Code Differential Corrections)
-$PASHS,RTC,TYP,1,0
-$PASHS,RTC,TYP,2,0
-; Turn on position broadcasting
-$PASHS,RTC,TYP,3,0.002
-$PASHS,RTC,TYP,22,0.002
-; Turn on raw Carrier Differential Measurements
-$PASHS,RTC,TYP,18,0.2
-$PASHS,RTC,TYP,19,0.2
-; Turn on station message, just for testing.
+; Turn on all of the RTCM messages
+$PASHS,RTC,TYP,1,1
+$PASHS,RTC,TYP,2,1
+$PASHS,RTC,TYP,3,0.01
+$PASHS,RTC,TYP,16,1
+$PASHS,RTC,TYP,22,0.01
+$PASHS,RTC,TYP,18,0.5
+$PASHS,RTC,TYP,19,0.5
 $PASHS,RTC,MSG,AUBURN AUTOMOW 2011
-
 ; Turn on RTK mode
 $PASHS,RTC,BAS,B
-; Set position and elevation masks to zero
-$PASHS,ELM,0
+$PASHS,ELM,4
 $PASHS,PEM,0
 ; Do code smoothing
 $PASHS,SMI,600,2
-; Turn on Strobe Correlator
 $PASHS,CRR,S
 ; Station Identifier (Fourteen and 0)
 $PASHS,RTC,STI,0140
 ; Burst Mode (highest speed available)
 $PASHS,RTC,SPD,9
 ; Turn on local messages
-$PASHS,NME,MSG,A,ON
-
-; Give a position for corrections
-; Broun Hall, 2 Meter Height
-$PASHS,POS,3236.2799390,N,8529.1717350,W,171.88
+; $PASHS,NME,MSG,A,ON
+$PASHS,LPS,1,1,1
+$PASHS,DYN,1
+; Solar House (Marker)
+$PASHS,POS,3235.35981083,N,8529.38734883,W,+175.899
 ; Save to PROM
 $PASHS,SAV,Y
